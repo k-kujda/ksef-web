@@ -27,20 +27,17 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
-          cache-dependency-path: ksef-web/package-lock.json
 
       - name: Install dependencies
-        working-directory: ./ksef-web
         run: npm ci
 
       - name: Build
-        working-directory: ./ksef-web
         run: npm run build
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: ./ksef-web/dist
+          path: ./dist
 
   deploy:
     environment:
