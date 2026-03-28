@@ -126,7 +126,7 @@ export default function XlsxToXml() {
         <div className="space-y-6">
           <div className="bg-blue-50 border border-blue-200 rounded-md p-4">
             <p className="text-sm text-blue-800">
-              <strong>Format pliku XLSX:</strong> Każdy wiersz = jedna faktura. Kolumny: numer, data_wyst, data_dost, 
+              <strong>Format pliku XLSX:</strong> Kolumny: numer, data_wyst, data_dost, 
               termin_plat, forma_plat, nazwa, kod_poczt, miejscowosc, adres, nip, kraj, 
               stawka_vat, nazwa_pozycji, jm, ilosc, cena, wartosc.
             </p>
