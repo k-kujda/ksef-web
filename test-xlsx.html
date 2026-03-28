@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test XLSX Parser</title>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+</head>
+<body>
+    <h1>Test XLSX to XML Parser</h1>
+    <input type="file" id="fileInput" accept=".xlsx,.xls">
+    <button onclick="testParse()">Test Parse</button>
+    <pre id="output"></pre>
+
+    <script>
+        const sellerInfo = {
+            nip: '1234567890',
+            nazwa: 'Test Firma Sp. z o.o.',
+            kodPocztowy: '00-001',
+            miejscowosc: 'Warszawa',
+            adres: 'ul. Testowa 1',
+            kraj: 'PL',
+            numerRachunku: 'PL00000000000000000000000000'
+        };
+
+        function parseDecimal(value) {
+            if (!value) return '0.00';
+            // Convert to string first if it's a number
+            const str = String(value);
+            const cleaned = str.replace(',', '.').trim();
+            const num = parseFloat(cleaned);
+            return isNaN(num) ? '0.00' : num.toFixed(2);
+        }
+
+        function parseVatRate(stawka) {
+            // Convert to string first if it's a number
+            const str = String(stawka);
+            const cleaned = str.replace('%', '').replace(',', '.').trim();
+            const rate = parseFloat(cleaned);
+            return isNaN(rate) ? 23 : rate;
+        }
+
+        async function testParse() {
+            const fileInput = document.getElementById('fileInput');
+            const output = document.getElementById('output');
+            
+            if (!fileInput.files || fileInput.files.length === 0) {
+                output.textContent = 'Please select a file first';
+                return;
+            }
+
+            const file = fileInput.files[0];
+            
+            try {
+                const data = await file.arrayBuffer();
+                const workbook = XLSX.read(data, { type: 'array' });
+                const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+                const rows = XLSX.utils.sheet_to_json(firstSheet);
+                
+                output.textContent = 'Parsed rows:\n' + JSON.stringify(rows, null, 2);
+                
+                console.log('Testing parseDecimal and parseVatRate:');
+                rows.forEach((row, i) => {
+                    console.log(`Row ${i}:`, row);
+                    try {
+                        console.log('  stawka_vat:', row.stawka_vat, 'type:', typeof row.stawka_vat);
+                        console.log('  parsed rate:', parseVatRate(row.stawka_vat));
+                        console.log('  ilosc:', row.ilosc, 'type:', typeof row.ilosc);
+                        console.log('  parsed ilosc:', parseDecimal(row.ilosc));
+                        console.log('  cena:', row.cena, 'type:', typeof row.cena);
+                        console.log('  parsed cena:', parseDecimal(row.cena));
+                        console.log('  wartosc:', row.wartosc, 'type:', typeof row.wartosc);
+                        console.log('  parsed wartosc:', parseDecimal(row.wartosc));
+                    } catch (error) {
+                        console.error('Error parsing row', i, error);
+                    }
+                });
+                
+            } catch (error) {
+                output.textContent = 'Error: ' + error.message + '\n\n' + error.stack;
+                console.error(error);
+            }
+        }
+    </script>
+</body>
+</html>

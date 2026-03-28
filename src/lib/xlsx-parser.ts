@@ -119,7 +119,19 @@ function getFormaPlatnosci(forma?: string): FormaPlatnosci {
   return FormaPlatnosci.PRZELEW;
 }
 
-function getStawkaPodatku(rate: number): StawkaPodatku {
+function getStawkaPodatku(stawka: string | number): StawkaPodatku {
+  if (typeof stawka === 'string') {
+    const stawkaUpper = stawka.toUpperCase().trim();
+    if (stawkaUpper === 'NP' || stawkaUpper === 'NP I') return StawkaPodatku.NP_I;
+    if (stawkaUpper === 'NP II') return StawkaPodatku.NP_II;
+    if (stawkaUpper === 'ZW') return StawkaPodatku.ZW;
+    if (stawkaUpper === 'OO') return StawkaPodatku.OO;
+    if (stawkaUpper === '0 KR') return StawkaPodatku.S0_KR;
+    if (stawkaUpper === '0 WDT') return StawkaPodatku.S0_WDT;
+    if (stawkaUpper === '0 EX') return StawkaPodatku.S0_EX;
+  }
+  
+  const rate = typeof stawka === 'number' ? stawka : parseFloat(String(stawka));
   if (rate === 23) return StawkaPodatku.S23;
   if (rate === 22) return StawkaPodatku.S22;
   if (rate === 8) return StawkaPodatku.S8;
@@ -155,7 +167,7 @@ export function xlsxRowsToFaktury(rows: XlsxRow[], seller: SellerInfo): Faktura[
       ilosc: parseFloat(parseDecimal(row.ilosc)),
       cenaJednostkowaNetto: parseFloat(parseDecimal(row.cena)),
       wartoscNetto: parseFloat(parseDecimal(row.wartosc)),
-      stawka: getStawkaPodatku(parseVatRate(row.stawka_vat)),
+      stawka: getStawkaPodatku(row.stawka_vat),
     }));
     
     let totalNetto = 0;
