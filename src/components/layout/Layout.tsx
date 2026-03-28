@@ -1,5 +1,5 @@
 import { Outlet, Link, useLocation } from 'react-router-dom';
-import { FileText, Download, FileImage, Users, Settings as SettingsIcon } from 'lucide-react';
+import { FileText, Download, FileImage, FileSpreadsheet, Users, Settings as SettingsIcon } from 'lucide-react';
 
 export default function Layout() {
   const location = useLocation();
@@ -8,6 +8,7 @@ export default function Layout() {
     { path: '/generate', label: 'Generuj fakturę', icon: FileText },
     { path: '/download', label: 'Pobierz z KSeF', icon: Download },
     { path: '/convert', label: 'Konwertuj do PDF', icon: FileImage },
+    { path: '/xlsx-to-xml', label: 'XLSX do XML', icon: FileSpreadsheet },
     { path: '/contacts', label: 'Kontakty', icon: Users },
     { path: '/settings', label: 'Ustawienia', icon: SettingsIcon },
   ];
