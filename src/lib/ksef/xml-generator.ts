@@ -137,8 +137,26 @@ export function generateXml(faktura: Faktura): Document {
   if (vat.p_13_6_1 !== undefined) {
     fa.appendChild(createElement(doc, 'P_13_6_1', formatDecimal(vat.p_13_6_1)));
   }
+  if (vat.p_13_6_2 !== undefined) {
+    fa.appendChild(createElement(doc, 'P_13_6_2', formatDecimal(vat.p_13_6_2)));
+  }
+  if (vat.p_13_6_3 !== undefined) {
+    fa.appendChild(createElement(doc, 'P_13_6_3', formatDecimal(vat.p_13_6_3)));
+  }
   if (vat.p_13_7 !== undefined) {
     fa.appendChild(createElement(doc, 'P_13_7', formatDecimal(vat.p_13_7)));
+  }
+  if (vat.p_13_8 !== undefined) {
+    fa.appendChild(createElement(doc, 'P_13_8', formatDecimal(vat.p_13_8)));
+  }
+  if (vat.p_13_9 !== undefined) {
+    fa.appendChild(createElement(doc, 'P_13_9', formatDecimal(vat.p_13_9)));
+  }
+  if (vat.p_13_10 !== undefined) {
+    fa.appendChild(createElement(doc, 'P_13_10', formatDecimal(vat.p_13_10)));
+  }
+  if (vat.p_13_11 !== undefined) {
+    fa.appendChild(createElement(doc, 'P_13_11', formatDecimal(vat.p_13_11)));
   }
 
   fa.appendChild(createElement(doc, 'P_15', formatDecimal(faktura.kwotaNaleznosci)));

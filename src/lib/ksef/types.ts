@@ -102,7 +102,13 @@ export interface PodsumowanieVAT {
   p_13_3?: number;
   p_14_3?: number;
   p_13_6_1?: number;
+  p_13_6_2?: number;
+  p_13_6_3?: number;
   p_13_7?: number;
+  p_13_8?: number;
+  p_13_9?: number;
+  p_13_10?: number;
+  p_13_11?: number;
 }
 
 export interface Faktura {
