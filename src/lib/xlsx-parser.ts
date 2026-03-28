@@ -2,32 +2,32 @@ import * as XLSX from 'xlsx';
 import { Faktura, Podmiot1, Podmiot2, WierszFaktury, Platnosc, FormaPlatnosci, RodzajFaktury, PodsumowanieVAT, StawkaPodatku } from './ksef/types';
 
 export interface XlsxRow {
-  numer: string;
+  numer: string | number;
   rodzaj: string;
-  data_wyst: string;
-  data_dost?: string;
-  data_wplywu?: string;
-  termin_plat?: string;
+  data_wyst: string | number;
+  data_dost?: string | number;
+  data_wplywu?: string | number;
+  termin_plat?: string | number;
   forma_plat?: string;
   nr_dok_korygowanego?: string;
   skrot_nazwy: string;
   nazwa: string;
-  kod_poczt: string;
+  kod_poczt: string | number;
   miejscowosc: string;
   adres: string;
-  nip: string;
+  nip: string | number;
   kraj: string;
-  kurs?: string;
+  kurs?: string | number;
   waluta?: string;
-  netto_razem?: string;
-  vat_razem?: string;
-  stawka_vat: string;
+  netto_razem?: string | number;
+  vat_razem?: string | number;
+  stawka_vat: string | number;
   nazwa_pozycji: string;
   kategoria?: string;
   jm: string;
-  ilosc: string;
-  cena: string;
-  wartosc: string;
+  ilosc: string | number;
+  cena: string | number;
+  wartosc: string | number;
 }
 
 export interface SellerInfo {
@@ -61,31 +61,40 @@ export async function parseXlsxFile(file: File): Promise<XlsxRow[]> {
   });
 }
 
-function parseDate(dateStr: string | undefined): string {
+function parseDate(dateStr: string | number | undefined): string {
   if (!dateStr) return new Date().toISOString().split('T')[0];
   
-  if (dateStr.includes('-')) {
-    return dateStr;
+  if (typeof dateStr === 'number') {
+    const date = XLSX.SSF.parse_date_code(dateStr);
+    return `${date.y}-${String(date.m).padStart(2, '0')}-${String(date.d).padStart(2, '0')}`;
   }
   
-  const excelDate = parseFloat(dateStr);
+  const str = String(dateStr);
+  if (str.includes('-')) {
+    return str;
+  }
+  
+  const excelDate = parseFloat(str);
   if (!isNaN(excelDate)) {
     const date = XLSX.SSF.parse_date_code(excelDate);
     return `${date.y}-${String(date.m).padStart(2, '0')}-${String(date.d).padStart(2, '0')}`;
   }
   
-  return dateStr;
+  return str;
 }
 
-function parseVatRate(stawka: string): number {
-  const cleaned = stawka.replace('%', '').replace(',', '.').trim();
+function parseVatRate(stawka: string | number): number {
+  if (typeof stawka === 'number') return stawka;
+  if (!stawka) return 23;
+  const cleaned = String(stawka).replace('%', '').replace(',', '.').trim();
   const rate = parseFloat(cleaned);
   return isNaN(rate) ? 23 : rate;
 }
 
-function parseDecimal(value: string | undefined): string {
-  if (!value) return '0.00';
-  const cleaned = value.replace(',', '.').trim();
+function parseDecimal(value: string | number | undefined): string {
+  if (value === undefined || value === null) return '0.00';
+  if (typeof value === 'number') return value.toFixed(2);
+  const cleaned = String(value).replace(',', '.').trim();
   const num = parseFloat(cleaned);
   return isNaN(num) ? '0.00' : num.toFixed(2);
 }
@@ -126,16 +135,18 @@ export function xlsxRowsToFaktury(rows: XlsxRow[], seller: SellerInfo): Faktura[
   const invoiceMap = new Map<string, { rows: XlsxRow[], buyer: XlsxRow }>();
   
   for (const row of rows) {
-    if (!invoiceMap.has(row.numer)) {
-      invoiceMap.set(row.numer, { rows: [], buyer: row });
+    const numerKey = String(row.numer);
+    if (!invoiceMap.has(numerKey)) {
+      invoiceMap.set(numerKey, { rows: [], buyer: row });
     }
-    invoiceMap.get(row.numer)!.rows.push(row);
+    invoiceMap.get(numerKey)!.rows.push(row);
   }
   
   const faktury: Faktura[] = [];
   
   for (const [numer, { rows: invoiceRows, buyer }] of invoiceMap) {
     const firstRow = invoiceRows[0];
+    const invoiceNumber = String(numer);
     
     const wiersze: WierszFaktury[] = invoiceRows.map((row, index) => ({
       nrWiersza: index + 1,
@@ -200,7 +211,7 @@ export function xlsxRowsToFaktury(rows: XlsxRow[], seller: SellerInfo): Faktura[
     
     const podmiot2: Podmiot2 = {
       daneIdentyfikacyjne: {
-        nip: buyer.nip,
+        nip: String(buyer.nip),
         nazwa: buyer.nazwa,
       },
       adres: {
@@ -222,7 +233,7 @@ export function xlsxRowsToFaktury(rows: XlsxRow[], seller: SellerInfo): Faktura[
     
     const faktura: Faktura = {
       dataWytworzenia: new Date(),
-      nrFaktury: numer,
+      nrFaktury: invoiceNumber,
       dataWystawienia: parseDate(firstRow.data_wyst),
       dataSprzedazy: parseDate(firstRow.data_dost || firstRow.data_wyst),
       rodzajFaktury: RodzajFaktury.VAT,
