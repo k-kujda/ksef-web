@@ -83,7 +83,13 @@ export class KSeFClient {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
     });
-    const challenge = await challengeResp.json();
+    
+    let challenge;
+    try {
+      challenge = await challengeResp.json();
+    } catch (error) {
+      throw new Error(`Challenge endpoint returned non-JSON response (status ${challengeResp.status}). This endpoint may not be available yet.`);
+    }
 
     const encryptedToken = await encryptKsefToken(
       this.baseUrl,
