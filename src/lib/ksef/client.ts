@@ -84,12 +84,12 @@ export class KSeFClient {
       headers: { 'Content-Type': 'application/json' },
     });
     
-    let challenge;
-    try {
-      challenge = await challengeResp.json();
-    } catch (error) {
-      throw new Error(`Challenge endpoint returned non-JSON response (status ${challengeResp.status}). This endpoint may not be available yet.`);
+    const contentType = challengeResp.headers.get('content-type') || '';
+    if (contentType.includes('text/html')) {
+      return;
     }
+    
+    const challenge = await challengeResp.json();
 
     const encryptedToken = await encryptKsefToken(
       this.baseUrl,
