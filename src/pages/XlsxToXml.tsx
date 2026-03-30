@@ -124,12 +124,32 @@ export default function XlsxToXml() {
 
       {step === 'upload' && (
         <div className="space-y-6">
-          <div className="bg-blue-50 border border-blue-200 rounded-md p-4">
-            <p className="text-sm text-blue-800">
+          <div className="bg-blue-50 border border-blue-200 rounded-md p-4 text-sm text-blue-800 space-y-2">
+            <p>
               <strong>Format pliku XLSX:</strong> Kolumny: numer, data_wyst, data_dost, 
               termin_plat, forma_plat, nazwa, kod_poczt, miejscowosc, adres, nip, kraj, 
               stawka_vat, nazwa_pozycji, jm, ilosc, cena, wartosc.
             </p>
+            <details>
+              <summary className="cursor-pointer font-medium">Dopuszczalne wartości kolumn</summary>
+              <div className="mt-2 space-y-1">
+                <p><strong>stawka_vat</strong> — stawka podatku VAT:</p>
+                <ul className="list-disc list-inside ml-2">
+                  <li><code>23</code>, <code>22</code>, <code>8</code>, <code>7</code>, <code>5</code>, <code>4</code>, <code>3</code> — stawki procentowe</li>
+                  <li><code>0 KR</code> — 0% sprzedaż krajowa</li>
+                  <li><code>0 WDT</code> — 0% WDT</li>
+                  <li><code>0 EX</code> — 0% eksport</li>
+                  <li><code>zw</code> — zwolnione</li>
+                  <li><code>oo</code> — odwrotne obciążenie</li>
+                  <li><code>np I</code> — niepodlegające (poza terytorium kraju)</li>
+                  <li><code>np II</code> — niepodlegające (art. 100 ust. 1 pkt 4)</li>
+                </ul>
+                <p className="mt-1"><strong>forma_plat</strong> — forma płatności:</p>
+                <ul className="list-disc list-inside ml-2">
+                  <li><code>gotówka</code>, <code>karta</code>, <code>bon</code>, <code>czek</code>, <code>kredyt</code>, <code>przelew</code>, <code>mobilna</code></li>
+                </ul>
+              </div>
+            </details>
           </div>
 
           <div className="bg-white rounded-lg shadow p-6 space-y-6">

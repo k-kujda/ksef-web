@@ -153,6 +153,9 @@ export class ParsedInvoiceRow {
     if (formaLower.includes('gotów') || formaLower.includes('gotow')) return FormaPlatnosci.GOTOWKA;
     if (formaLower.includes('kart')) return FormaPlatnosci.KARTA;
     if (formaLower.includes('bon')) return FormaPlatnosci.BON;
+    if (formaLower.includes('czek')) return FormaPlatnosci.CZEK;
+    if (formaLower.includes('kredyt')) return FormaPlatnosci.KREDYT;
+    if (formaLower.includes('przelew')) return FormaPlatnosci.PRZELEW;
     if (formaLower.includes('mobil')) return FormaPlatnosci.MOBILNA;
     
     return FormaPlatnosci.PRZELEW;
@@ -160,25 +163,32 @@ export class ParsedInvoiceRow {
 
   private parseStawka(stawka: string | number): StawkaPodatku {
     if (typeof stawka === 'string') {
-      const stawkaUpper = stawka.toUpperCase().trim();
-      if (stawkaUpper === 'NP' || stawkaUpper === 'NP I') return StawkaPodatku.NP_I;
-      if (stawkaUpper === 'NP II') return StawkaPodatku.NP_II;
-      if (stawkaUpper === 'ZW') return StawkaPodatku.ZW;
-      if (stawkaUpper === 'OO') return StawkaPodatku.OO;
-      if (stawkaUpper === '0 KR') return StawkaPodatku.S0_KR;
-      if (stawkaUpper === '0 WDT') return StawkaPodatku.S0_WDT;
-      if (stawkaUpper === '0 EX') return StawkaPodatku.S0_EX;
+      const stawkaTrimmed = stawka.trim();
+      const stawkaLower = stawkaTrimmed.toLowerCase();
+      if (stawkaLower === 'np' || stawkaLower === 'np i') return StawkaPodatku.NP_I;
+      if (stawkaLower === 'np ii') return StawkaPodatku.NP_II;
+      if (stawkaLower === 'zw') return StawkaPodatku.ZW;
+      if (stawkaLower === 'oo') return StawkaPodatku.OO;
+      if (stawkaLower === '0 kr') return StawkaPodatku.S0_KR;
+      if (stawkaLower === '0 wdt') return StawkaPodatku.S0_WDT;
+      if (stawkaLower === '0 ex') return StawkaPodatku.S0_EX;
     }
     
-    const rate = typeof stawka === 'number' ? stawka : parseFloat(String(stawka));
-    if (rate === 23) return StawkaPodatku.S23;
-    if (rate === 22) return StawkaPodatku.S22;
-    if (rate === 8) return StawkaPodatku.S8;
-    if (rate === 7) return StawkaPodatku.S7;
-    if (rate === 5) return StawkaPodatku.S5;
-    if (rate === 4) return StawkaPodatku.S4;
-    if (rate === 3) return StawkaPodatku.S3;
-    if (rate === 0) return StawkaPodatku.S0_KR;
+    const str = String(stawka).replace(',', '.').replace('%', '').trim();
+    const rate = parseFloat(str);
+    if (isNaN(rate)) return StawkaPodatku.S23;
+    
+    // Handle decimal fractions (e.g. 0.23 from XLSX percentage format)
+    const pct = rate > 0 && rate < 1 ? Math.round(rate * 100) : rate;
+    
+    if (pct === 23) return StawkaPodatku.S23;
+    if (pct === 22) return StawkaPodatku.S22;
+    if (pct === 8) return StawkaPodatku.S8;
+    if (pct === 7) return StawkaPodatku.S7;
+    if (pct === 5) return StawkaPodatku.S5;
+    if (pct === 4) return StawkaPodatku.S4;
+    if (pct === 3) return StawkaPodatku.S3;
+    if (pct === 0) return StawkaPodatku.S0_KR;
     
     return StawkaPodatku.S23;
   }
@@ -345,11 +355,11 @@ export function buildVatSummary(rows: ParsedInvoiceRow[]): PodsumowanieVAT {
   }
 
   for (const [field, amounts] of vatGroups) {
-    summary[field] = amounts.netto;
+    summary[field] = Math.round(amounts.netto * 100) / 100;
     
     const vatField = field.replace('p_13_', 'p_14_') as keyof PodsumowanieVAT;
     if (amounts.vat > 0 && (field === 'p_13_1' || field === 'p_13_2' || field === 'p_13_3')) {
-      summary[vatField] = amounts.vat;
+      summary[vatField] = Math.round(amounts.vat * 100) / 100;
     }
   }
 

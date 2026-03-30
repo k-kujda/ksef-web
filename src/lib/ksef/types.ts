@@ -29,9 +29,10 @@ export enum FormaPlatnosci {
   GOTOWKA = '1',
   KARTA = '2',
   BON = '3',
-  PRZELEW = '4',
-  MOBILNA = '5',
-  INNA_WEB = '6',
+  CZEK = '4',
+  KREDYT = '5',
+  PRZELEW = '6',
+  MOBILNA = '7',
 }
 
 export interface Adres {
