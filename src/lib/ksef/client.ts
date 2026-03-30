@@ -48,8 +48,10 @@ export class KSeFClient {
   }
 
   private getUrl(path: string): string {
-    const url = `${this.baseUrl}${path}`;
-    return this.corsProxyUrl ? `${this.corsProxyUrl}${encodeURIComponent(url)}` : url;
+    if (this.corsProxyUrl) {
+      return `${this.corsProxyUrl}${path}`;
+    }
+    return `${this.baseUrl}${path}`;
   }
 
   private async request(path: string, options: RequestInit = {}): Promise<Response> {

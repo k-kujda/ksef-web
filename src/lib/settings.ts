@@ -14,6 +14,7 @@ const defaultSettings: AppSettings = {
   environment: KSeFEnvironment.TEST,
   nip: '',
   ksefToken: '',
+  corsProxyUrl: 'https://ksef-proxy.kujda-k.workers.dev',
 };
 
 export function loadSettings(): AppSettings {
