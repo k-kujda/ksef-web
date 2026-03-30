@@ -87,6 +87,7 @@ export interface RachunekBankowy {
   nrRb: string;
   swift?: string;
   nazwaBanku?: string;
+  opisRachunku?: string;
 }
 
 export interface Platnosc {

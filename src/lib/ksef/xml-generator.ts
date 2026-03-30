@@ -243,6 +243,9 @@ export function generateXml(faktura: Faktura): Document {
       if (faktura.platnosc.rachunek.nazwaBanku) {
         rb.appendChild(createElement(doc, 'NazwaBanku', faktura.platnosc.rachunek.nazwaBanku));
       }
+      if (faktura.platnosc.rachunek.opisRachunku) {
+        rb.appendChild(createElement(doc, 'OpisRachunku', faktura.platnosc.rachunek.opisRachunku));
+      }
       plat.appendChild(rb);
     }
     fa.appendChild(plat);

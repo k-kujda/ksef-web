@@ -38,6 +38,10 @@ export interface SellerInfo {
   adres: string;
   kraj: string;
   numerRachunku?: string;
+  swift?: string;
+  nazwaBanku?: string;
+  opisRachunku?: string;
+  dodatkowyOpis?: string;
 }
 
 export interface ValidationError {
@@ -417,7 +421,12 @@ export function rowsToFaktura(rows: ParsedInvoiceRow[], seller: SellerInfo): Fak
     termin: firstRow.terminPlatnosci,
     forma: firstRow.formaPlatnosci,
     ...(seller.numerRachunku && {
-      rachunek: { nrRb: seller.numerRachunku }
+      rachunek: {
+        nrRb: seller.numerRachunku,
+        ...(seller.swift && { swift: seller.swift }),
+        ...(seller.nazwaBanku && { nazwaBanku: seller.nazwaBanku }),
+        ...(seller.opisRachunku && { opisRachunku: seller.opisRachunku }),
+      }
     }),
   };
 
@@ -434,6 +443,9 @@ export function rowsToFaktura(rows: ParsedInvoiceRow[], seller: SellerInfo): Fak
     kwotaNaleznosci: totalBrutto,
     platnosc,
     kodWaluty: firstRow.waluta,
+    ...(seller.dodatkowyOpis && {
+      dodatkowyOpis: [['Opis', seller.dodatkowyOpis]],
+    }),
   };
 
   return faktura;

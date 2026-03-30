@@ -20,6 +20,10 @@ export default function XlsxToXml() {
     adres: '',
     kraj: 'PL',
     numerRachunku: '',
+    swift: '',
+    nazwaBanku: '',
+    opisRachunku: '',
+    dodatkowyOpis: '',
   });
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -244,6 +248,58 @@ export default function XlsxToXml() {
                   value={seller.numerRachunku}
                   onChange={(e) => setSeller({ ...seller, numerRachunku: e.target.value })}
                   placeholder="PL00 0000 0000 0000 0000 0000 0000"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  SWIFT (opcjonalnie)
+                </label>
+                <input
+                  type="text"
+                  value={seller.swift}
+                  onChange={(e) => setSeller({ ...seller, swift: e.target.value })}
+                  placeholder="BREXPLPWXXX"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Nazwa banku (opcjonalnie)
+                </label>
+                <input
+                  type="text"
+                  value={seller.nazwaBanku}
+                  onChange={(e) => setSeller({ ...seller, nazwaBanku: e.target.value })}
+                  placeholder="mBank S.A."
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div className="col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Opis rachunku (opcjonalnie)
+                </label>
+                <input
+                  type="text"
+                  value={seller.opisRachunku}
+                  onChange={(e) => setSeller({ ...seller, opisRachunku: e.target.value })}
+                  placeholder="np. IBAN EUR, dane banku pośredniczącego..."
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div className="col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Dodatkowy opis (opcjonalnie)
+                </label>
+                <textarea
+                  value={seller.dodatkowyOpis}
+                  onChange={(e) => setSeller({ ...seller, dodatkowyOpis: e.target.value })}
+                  placeholder="Dodatkowe informacje na fakturze..."
+                  rows={2}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
