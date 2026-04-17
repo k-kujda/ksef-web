@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { FileUp, Download, ChevronRight, ChevronLeft, AlertCircle, ShieldCheck, Loader2, XCircle, AlertTriangle, CheckCircle, ChevronDown } from 'lucide-react';
 import { parseXlsxFile, ParsedInvoiceRow, SellerInfo, rowsToFaktura } from '../lib/xlsx-parser';
 import { toXmlString } from '../lib/ksef/xml-generator';
@@ -9,15 +9,18 @@ import JSZip from 'jszip';
 
 type Step = 'upload' | 'preview' | 'validate' | 'generate';
 
-export default function XlsxToXml() {
-  const [step, setStep] = useState<Step>('upload');
-  const [file, setFile] = useState<File | null>(null);
-  const [parsedRows, setParsedRows] = useState<ParsedInvoiceRow[]>([]);
-  const [editableRows, setEditableRows] = useState<any[]>([]);
-  const [generatedXml, setGeneratedXml] = useState('');
-  const [validationResult, setValidationResult] = useState<ValidationResult | null>(null);
-  const [validating, setValidating] = useState(false);
-  const [seller, setSeller] = useState<SellerInfo>({
+const SELLER_STORAGE_KEY = 'ksef-seller-info';
+
+const loadSellerFromStorage = (): SellerInfo => {
+  try {
+    const stored = localStorage.getItem(SELLER_STORAGE_KEY);
+    if (stored) {
+      return JSON.parse(stored);
+    }
+  } catch (error) {
+    console.error('Failed to load seller info from localStorage:', error);
+  }
+  return {
     nip: '',
     nazwa: '',
     kodPocztowy: '',
@@ -30,7 +33,26 @@ export default function XlsxToXml() {
     opisRachunku: '',
     dodatkowyOpis: [],
     p18ReverseCharge: false,
-  });
+  };
+};
+
+export default function XlsxToXml() {
+  const [step, setStep] = useState<Step>('upload');
+  const [file, setFile] = useState<File | null>(null);
+  const [parsedRows, setParsedRows] = useState<ParsedInvoiceRow[]>([]);
+  const [editableRows, setEditableRows] = useState<any[]>([]);
+  const [generatedXml, setGeneratedXml] = useState('');
+  const [validationResult, setValidationResult] = useState<ValidationResult | null>(null);
+  const [validating, setValidating] = useState(false);
+  const [seller, setSeller] = useState<SellerInfo>(loadSellerFromStorage());
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(SELLER_STORAGE_KEY, JSON.stringify(seller));
+    } catch (error) {
+      console.error('Failed to save seller info to localStorage:', error);
+    }
+  }, [seller]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
