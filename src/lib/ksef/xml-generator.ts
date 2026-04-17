@@ -166,10 +166,6 @@ export function generateXml(faktura: Faktura): Document {
 
   fa.appendChild(createElement(doc, 'P_15', formatDecimal(faktura.kwotaNaleznosci)));
 
-  if (faktura.kursWalutyZ !== undefined) {
-    fa.appendChild(createElement(doc, 'KursWalutyZ', formatDecimal(faktura.kursWalutyZ)));
-  }
-
   const adnotacje = createElement(doc, 'Adnotacje');
   adnotacje.appendChild(createElement(doc, 'P_16', '2'));
   adnotacje.appendChild(createElement(doc, 'P_17', '2'));
@@ -235,6 +231,9 @@ export function generateXml(faktura: Faktura): Document {
     }
     if (w.gtu) {
       fw.appendChild(createElement(doc, 'GTU', w.gtu));
+    }
+    if (w.kursWaluty !== undefined) {
+      fw.appendChild(createElement(doc, 'KursWaluty', formatDecimal(w.kursWaluty)));
     }
     fa.appendChild(fw);
   });

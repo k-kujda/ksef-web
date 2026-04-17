@@ -476,6 +476,7 @@ export function rowsToFaktura(rows: ParsedInvoiceRow[], seller: SellerInfo): Fak
     cenaJednostkowaNetto: row.pozycjaCena,
     wartoscNetto: row.pozycjaWartosc,
     stawka: row.stawka,
+    kursWaluty: row.kurs,
   }));
 
   const podsumowanieVat = buildVatSummary(rows);
@@ -512,7 +513,6 @@ export function rowsToFaktura(rows: ParsedInvoiceRow[], seller: SellerInfo): Fak
       dodatkowyOpis: seller.dodatkowyOpis,
     }),
     p18ReverseCharge: seller.p18ReverseCharge,
-    kursWalutyZ: firstRow.kurs,
   };
 
   return faktura;

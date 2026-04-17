@@ -83,6 +83,7 @@ export interface WierszFaktury {
   stawka?: StawkaPodatku;
   gtu?: string;
   pkwiu?: string;
+  kursWaluty?: number;
 }
 
 export interface RachunekBankowy {
@@ -131,5 +132,4 @@ export interface Faktura {
   platnosc?: Platnosc;
   dodatkowyOpis?: Array<[string, string]>;
   p18ReverseCharge?: boolean;
-  kursWalutyZ?: number;
 }
