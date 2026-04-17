@@ -166,6 +166,10 @@ export function generateXml(faktura: Faktura): Document {
 
   fa.appendChild(createElement(doc, 'P_15', formatDecimal(faktura.kwotaNaleznosci)));
 
+  if (faktura.kursWalutyZ !== undefined) {
+    fa.appendChild(createElement(doc, 'KursWalutyZ', formatDecimal(faktura.kursWalutyZ)));
+  }
+
   const adnotacje = createElement(doc, 'Adnotacje');
   adnotacje.appendChild(createElement(doc, 'P_16', '2'));
   adnotacje.appendChild(createElement(doc, 'P_17', '2'));

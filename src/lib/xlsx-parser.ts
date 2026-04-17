@@ -73,6 +73,7 @@ export class ParsedInvoiceRow {
   
   stawka: StawkaPodatku;
   waluta: string;
+  kurs?: number;
   
   kwotaVat: number;
   kwotaBrutto: number;
@@ -101,6 +102,7 @@ export class ParsedInvoiceRow {
     
     this.stawka = this.parseStawka(row.stawka_vat);
     this.waluta = String(row.waluta || 'PLN');
+    this.kurs = row.kurs ? this.parseDecimalNumber(row.kurs) : undefined;
     
     this.kwotaVat = Math.round(this.calculateVat() * 100) / 100;
     this.kwotaBrutto = Math.round((this.pozycjaWartosc + this.kwotaVat) * 100) / 100;
@@ -510,6 +512,7 @@ export function rowsToFaktura(rows: ParsedInvoiceRow[], seller: SellerInfo): Fak
       dodatkowyOpis: seller.dodatkowyOpis,
     }),
     p18ReverseCharge: seller.p18ReverseCharge,
+    kursWalutyZ: firstRow.kurs,
   };
 
   return faktura;

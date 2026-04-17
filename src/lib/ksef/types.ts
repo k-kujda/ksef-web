@@ -131,4 +131,5 @@ export interface Faktura {
   platnosc?: Platnosc;
   dodatkowyOpis?: Array<[string, string]>;
   p18ReverseCharge?: boolean;
+  kursWalutyZ?: number;
 }
