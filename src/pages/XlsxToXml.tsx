@@ -29,6 +29,7 @@ export default function XlsxToXml() {
     nazwaBanku: '',
     opisRachunku: '',
     dodatkowyOpis: [],
+    p18ReverseCharge: false,
   });
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -378,6 +379,23 @@ export default function XlsxToXml() {
                     + Dodaj pole
                   </button>
                 </div>
+              </div>
+
+              <div className="col-span-2">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={seller.p18ReverseCharge || false}
+                    onChange={(e) => setSeller({ ...seller, p18ReverseCharge: e.target.checked })}
+                    className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                  />
+                  <span className="text-sm font-medium text-gray-700">
+                    P_18 Odwrotne obciążenie (Reverse charge)
+                  </span>
+                </label>
+                <p className="ml-6 text-xs text-gray-500 mt-1">
+                  Zaznacz jeśli faktura dotyczy odwrotnego obciążenia VAT
+                </p>
               </div>
             </div>
           </div>

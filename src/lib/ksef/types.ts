@@ -130,4 +130,5 @@ export interface Faktura {
   wiersze: WierszFaktury[];
   platnosc?: Platnosc;
   dodatkowyOpis?: Array<[string, string]>;
+  p18ReverseCharge?: boolean;
 }

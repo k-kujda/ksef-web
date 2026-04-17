@@ -42,6 +42,7 @@ export interface SellerInfo {
   nazwaBanku?: string;
   opisRachunku?: string;
   dodatkowyOpis?: Array<[string, string]>;
+  p18ReverseCharge?: boolean;
 }
 
 export interface ValidationError {
@@ -508,6 +509,7 @@ export function rowsToFaktura(rows: ParsedInvoiceRow[], seller: SellerInfo): Fak
     ...(seller.dodatkowyOpis && seller.dodatkowyOpis.length > 0 && {
       dodatkowyOpis: seller.dodatkowyOpis,
     }),
+    p18ReverseCharge: seller.p18ReverseCharge,
   };
 
   return faktura;

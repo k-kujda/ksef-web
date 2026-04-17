@@ -169,9 +169,8 @@ export function generateXml(faktura: Faktura): Document {
   const adnotacje = createElement(doc, 'Adnotacje');
   adnotacje.appendChild(createElement(doc, 'P_16', '2'));
   adnotacje.appendChild(createElement(doc, 'P_17', '2'));
-  // P_18: Set to '1' if reverse charge (P_13_8 or P_13_10) is present
-  const hasReverseCharge = vat.p_13_8 !== undefined || vat.p_13_10 !== undefined;
-  adnotacje.appendChild(createElement(doc, 'P_18', hasReverseCharge ? '1' : '2'));
+  // P_18: Manual toggle for reverse charge
+  adnotacje.appendChild(createElement(doc, 'P_18', faktura.p18ReverseCharge ? '1' : '2'));
   adnotacje.appendChild(createElement(doc, 'P_18A', '2'));
   const zwolnienie = createElement(doc, 'Zwolnienie');
   if (vat.p_13_7 !== undefined) {
