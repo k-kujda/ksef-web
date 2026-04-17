@@ -6,6 +6,7 @@ import ConvertToPDF from './pages/ConvertToPDF';
 import XlsxToXml from './pages/XlsxToXml';
 import Contacts from './pages/Contacts';
 import Settings from './pages/Settings';
+import ValidateXml from './pages/ValidateXml';
 
 function App() {
   return (
@@ -17,6 +18,7 @@ function App() {
           <Route path="download" element={<DownloadInvoices />} />
           <Route path="convert" element={<ConvertToPDF />} />
           <Route path="xlsx-to-xml" element={<XlsxToXml />} />
+          <Route path="validate" element={<ValidateXml />} />
           <Route path="contacts" element={<Contacts />} />
           <Route path="settings" element={<Settings />} />
         </Route>

@@ -59,9 +59,15 @@ export class KSeFClient {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), this.timeout);
 
+    const headers = new Headers(options.headers);
+    if (this.corsProxyUrl) {
+      headers.set('X-KSeF-Base-Url', this.baseUrl);
+    }
+
     try {
       const response = await fetch(url, {
         ...options,
+        headers,
         signal: controller.signal,
       });
       clearTimeout(timeoutId);
@@ -83,11 +89,6 @@ export class KSeFClient {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
     });
-    
-    const contentType = challengeResp.headers.get('content-type') || '';
-    if (contentType.includes('text/html')) {
-      return;
-    }
     
     const challenge = await challengeResp.json();
 
@@ -269,14 +270,13 @@ export class KSeFClient {
     while (Date.now() < deadline) {
       const status = await this.getExportStatus(referenceNumber);
       
-      if (status.status.toLowerCase().includes('completed') || 
-          status.status.toLowerCase().includes('done') ||
-          status.status.toLowerCase().includes('200')) {
+      const s = status.status.toLowerCase();
+      if (s.includes('completed') || s.includes('done') || s.includes('200') ||
+          s.includes('sukcesem') || s.includes('zakończony')) {
         return status;
       }
       
-      if (status.status.toLowerCase().includes('failed') || 
-          status.status.toLowerCase().includes('error')) {
+      if (s.includes('failed') || s.includes('error') || s.includes('błąd')) {
         throw new Error(`Export failed: ${status.status}`);
       }
       

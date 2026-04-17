@@ -82,6 +82,11 @@ export function generateXml(faktura: Faktura): Document {
   } else if (dn.kodUE && dn.nrVatUE) {
     di2.appendChild(createElement(doc, 'KodUE', dn.kodUE));
     di2.appendChild(createElement(doc, 'NrVatUE', dn.nrVatUE));
+  } else if (dn.nrID) {
+    if (dn.kodKraju) {
+      di2.appendChild(createElement(doc, 'KodKraju', dn.kodKraju));
+    }
+    di2.appendChild(createElement(doc, 'NrID', dn.nrID));
   } else if (dn.brakId) {
     di2.appendChild(createElement(doc, 'BrakID', '1'));
   }
@@ -164,7 +169,9 @@ export function generateXml(faktura: Faktura): Document {
   const adnotacje = createElement(doc, 'Adnotacje');
   adnotacje.appendChild(createElement(doc, 'P_16', '2'));
   adnotacje.appendChild(createElement(doc, 'P_17', '2'));
-  adnotacje.appendChild(createElement(doc, 'P_18', '2'));
+  // P_18: Set to '1' if reverse charge (P_13_8 or P_13_10) is present
+  const hasReverseCharge = vat.p_13_8 !== undefined || vat.p_13_10 !== undefined;
+  adnotacje.appendChild(createElement(doc, 'P_18', hasReverseCharge ? '1' : '2'));
   adnotacje.appendChild(createElement(doc, 'P_18A', '2'));
   const zwolnienie = createElement(doc, 'Zwolnienie');
   if (vat.p_13_7 !== undefined) {
@@ -184,6 +191,20 @@ export function generateXml(faktura: Faktura): Document {
   fa.appendChild(adnotacje);
 
   fa.appendChild(createElement(doc, 'RodzajFaktury', faktura.rodzajFaktury));
+
+  // FP and TP elements must come before DodatkowyOpis according to XSD
+  // FP is optional - for invoices under art. 109 ust. 3d
+  // TP is optional - for related party transactions
+  // We don't add them by default for standard invoices
+
+  if (faktura.dodatkowyOpis) {
+    faktura.dodatkowyOpis.forEach(([klucz, wartosc]) => {
+      const doEl = createElement(doc, 'DodatkowyOpis');
+      doEl.appendChild(createElement(doc, 'Klucz', klucz));
+      doEl.appendChild(createElement(doc, 'Wartosc', wartosc));
+      fa.appendChild(doEl);
+    });
+  }
 
   faktura.wiersze.forEach((w: WierszFaktury) => {
     const fw = createElement(doc, 'FaWiersz');
@@ -214,15 +235,6 @@ export function generateXml(faktura: Faktura): Document {
     }
     fa.appendChild(fw);
   });
-
-  if (faktura.dodatkowyOpis) {
-    faktura.dodatkowyOpis.forEach(([klucz, wartosc]) => {
-      const doEl = createElement(doc, 'DodatkowyOpis');
-      doEl.appendChild(createElement(doc, 'Klucz', klucz));
-      doEl.appendChild(createElement(doc, 'Wartosc', wartosc));
-      fa.appendChild(doEl);
-    });
-  }
 
   if (faktura.platnosc) {
     const plat = createElement(doc, 'Platnosc');

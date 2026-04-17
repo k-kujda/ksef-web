@@ -1,17 +1,22 @@
 import { useState } from 'react';
-import { FileUp, Download, ChevronRight, ChevronLeft, AlertCircle } from 'lucide-react';
+import { FileUp, Download, ChevronRight, ChevronLeft, AlertCircle, ShieldCheck, Loader2, XCircle, AlertTriangle, CheckCircle, ChevronDown } from 'lucide-react';
 import { parseXlsxFile, ParsedInvoiceRow, SellerInfo, rowsToFaktura } from '../lib/xlsx-parser';
 import { toXmlString } from '../lib/ksef/xml-generator';
 import { generateInvoice } from '../lib/pdf-generator';
+import { validate, disposeValidator } from '@ksefuj/validator';
+import type { ValidationResult, ValidationIssue } from '@ksefuj/validator';
 import JSZip from 'jszip';
 
-type Step = 'upload' | 'preview' | 'generate';
+type Step = 'upload' | 'preview' | 'validate' | 'generate';
 
 export default function XlsxToXml() {
   const [step, setStep] = useState<Step>('upload');
   const [file, setFile] = useState<File | null>(null);
   const [parsedRows, setParsedRows] = useState<ParsedInvoiceRow[]>([]);
   const [editableRows, setEditableRows] = useState<any[]>([]);
+  const [generatedXml, setGeneratedXml] = useState('');
+  const [validationResult, setValidationResult] = useState<ValidationResult | null>(null);
+  const [validating, setValidating] = useState(false);
   const [seller, setSeller] = useState<SellerInfo>({
     nip: '',
     nazwa: '',
@@ -58,7 +63,7 @@ export default function XlsxToXml() {
     }
   };
 
-  const handleGenerate = async () => {
+  const handleValidate = async () => {
     try {
       for (let i = 0; i < parsedRows.length; i++) {
         const row = parsedRows[i];
@@ -73,15 +78,38 @@ export default function XlsxToXml() {
       
       const faktura = rowsToFaktura(parsedRows, seller);
       const xml = toXmlString(faktura);
+      setGeneratedXml(xml);
+      setStep('validate');
+      setValidating(true);
+      setValidationResult(null);
+
+      try {
+        const result = await validate(xml);
+        setValidationResult(result);
+      } catch (err) {
+        console.error('Validation error:', err);
+      } finally {
+        disposeValidator();
+        setValidating(false);
+      }
+    } catch (error) {
+      console.error('Błąd generowania:', error);
+      alert('Błąd podczas generowania: ' + (error as Error).message);
+    }
+  };
+
+  const handleDownload = async () => {
+    try {
+      const faktura = rowsToFaktura(parsedRows, seller);
       const baseFileName = faktura.nrFaktury.replace(/[\/\\:*?"<>|]/g, '_');
       
-      const xmlBlob = new Blob([xml], { type: 'application/xml' });
+      const xmlBlob = new Blob([generatedXml], { type: 'application/xml' });
       const xmlFile = new File([xmlBlob], `${baseFileName}.xml`, { type: 'application/xml' });
       
       const pdfBlob = await generateInvoice(xmlFile, { nrKSeF: faktura.nrFaktury }, 'blob');
       
       const zip = new JSZip();
-      zip.file(`${baseFileName}.xml`, xml);
+      zip.file(`${baseFileName}.xml`, generatedXml);
       zip.file(`${baseFileName}.pdf`, pdfBlob);
       
       const zipBlob = await zip.generateAsync({ type: 'blob' });
@@ -97,6 +125,8 @@ export default function XlsxToXml() {
       setFile(null);
       setParsedRows([]);
       setEditableRows([]);
+      setGeneratedXml('');
+      setValidationResult(null);
     } catch (error) {
       console.error('Błąd generowania:', error);
       alert('Błąd podczas generowania: ' + (error as Error).message);
@@ -119,10 +149,15 @@ export default function XlsxToXml() {
           </div>
           <span className="ml-2 text-sm font-medium">Podgląd</span>
           <ChevronRight className="mx-4 text-gray-400" />
-          <div className={`flex items-center justify-center w-10 h-10 rounded-full ${step === 'generate' ? 'bg-blue-600 text-white' : 'bg-gray-300 text-gray-600'}`}>
+          <div className={`flex items-center justify-center w-10 h-10 rounded-full ${step === 'validate' ? 'bg-blue-600 text-white' : 'bg-gray-300 text-gray-600'}`}>
             3
           </div>
-          <span className="ml-2 text-sm font-medium">Generuj</span>
+          <span className="ml-2 text-sm font-medium">Walidacja</span>
+          <ChevronRight className="mx-4 text-gray-400" />
+          <div className={`flex items-center justify-center w-10 h-10 rounded-full ${step === 'generate' ? 'bg-blue-600 text-white' : 'bg-gray-300 text-gray-600'}`}>
+            4
+          </div>
+          <span className="ml-2 text-sm font-medium">Pobierz</span>
         </div>
       </div>
 
@@ -430,12 +465,149 @@ export default function XlsxToXml() {
                 <ChevronLeft className="w-4 h-4" /> Wstecz
               </button>
               <button
-                onClick={handleGenerate}
+                onClick={handleValidate}
                 disabled={parsedRows.some(r => r.hasErrors())}
                 className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
+                <ShieldCheck className="w-4 h-4" />
+                Waliduj i generuj
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {step === 'validate' && (
+        <div className="space-y-6">
+          <div className="bg-white rounded-lg shadow p-6">
+            {validating ? (
+              <div className="flex items-center justify-center gap-3 py-8">
+                <Loader2 className="w-6 h-6 animate-spin text-blue-600" />
+                <span className="text-gray-600">Walidacja XML (XSD + reguły semantyczne)...</span>
+              </div>
+            ) : validationResult ? (
+              <div className="space-y-4">
+                <div className={`rounded-md p-4 ${validationResult.valid ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
+                  <div className="flex items-center gap-3">
+                    {validationResult.valid ? (
+                      <CheckCircle className="w-6 h-6 text-green-600" />
+                    ) : (
+                      <XCircle className="w-6 h-6 text-red-600" />
+                    )}
+                    <div>
+                      <p className={`font-semibold ${validationResult.valid ? 'text-green-800' : 'text-red-800'}`}>
+                        {validationResult.valid ? 'XML poprawny' : 'XML zawiera błędy'}
+                      </p>
+                      <p className="text-sm text-gray-600">
+                        {validationResult.issues.filter(i => i.code.severity === 'error').length} błędów,{' '}
+                        {validationResult.issues.filter(i => i.code.severity === 'warning').length} ostrzeżeń
+                        {validationResult.metadata && ` — ${validationResult.metadata.validationTimeMs}ms`}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {validationResult.issues.length > 0 && (
+                  <div className="divide-y divide-gray-100 border border-gray-200 rounded-md">
+                    {validationResult.issues.map((issue: ValidationIssue, idx: number) => {
+                      const isError = issue.code.severity === 'error';
+                      return (
+                        <details key={idx} className={`group ${idx % 2 === 0 ? '' : 'bg-gray-50/50'}`}>
+                          <summary className="px-4 py-3 cursor-pointer list-none flex items-start gap-2 hover:bg-gray-50/80">
+                            {isError ? (
+                              <XCircle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
+                            ) : (
+                              <AlertTriangle className="w-4 h-4 text-yellow-500 shrink-0 mt-0.5" />
+                            )}
+                            <div className="flex-1 min-w-0">
+                              <span className={`text-xs font-mono px-1.5 py-0.5 rounded ${isError ? 'bg-red-50 text-red-600' : 'bg-yellow-50 text-yellow-600'}`}>
+                                {issue.code.domain}/{issue.code.code}
+                              </span>
+                              <p className="mt-1 text-sm text-gray-800 line-clamp-2 group-open:line-clamp-none">{issue.message}</p>
+                            </div>
+                            <ChevronDown className="w-4 h-4 text-gray-400 shrink-0 mt-1 transition-transform group-open:rotate-180" />
+                          </summary>
+                          <div className="px-4 pb-3 pl-10">
+                            <p className="text-sm text-gray-800 mb-3">{issue.message}</p>
+                            
+                            <div className="space-y-2 text-xs">
+                              <div className="grid grid-cols-2 gap-2">
+                                <div><span className="font-medium text-gray-600">Kategoria:</span> <code className="bg-gray-100 px-1 rounded">{issue.code.category}</code></div>
+                                <div><span className="font-medium text-gray-600">Domena:</span> <code className="bg-gray-100 px-1 rounded">{issue.code.domain}</code></div>
+                              </div>
+
+                              {issue.context?.location && (
+                                <div className="space-y-1 pt-2 border-t border-gray-200">
+                                  <p className="font-medium text-gray-600">Lokalizacja:</p>
+                                  {issue.context.location.element && (
+                                    <p className="ml-2">Element: <code className="bg-gray-100 px-1 rounded">{issue.context.location.element}</code></p>
+                                  )}
+                                  {issue.context.location.xpath && (
+                                    <p className="ml-2 font-mono text-gray-500 break-all">XPath: {issue.context.location.xpath}</p>
+                                  )}
+                                  {issue.context.location.lineNumber !== undefined && (
+                                    <p className="ml-2">Linia: {issue.context.location.lineNumber}{issue.context.location.columnNumber !== undefined && `, kolumna: ${issue.context.location.columnNumber}`}</p>
+                                  )}
+                                </div>
+                              )}
+
+                              {(issue.context?.actualValue !== undefined || issue.context?.expectedValues || issue.context?.relatedElements) && (
+                                <div className="space-y-1 pt-2 border-t border-gray-200">
+                                  <p className="font-medium text-gray-600">Kontekst:</p>
+                                  {issue.context.actualValue !== undefined && (
+                                    <p className="ml-2">Aktualna wartość: <code className="bg-gray-100 px-1 rounded">{String(issue.context.actualValue)}</code></p>
+                                  )}
+                                  {issue.context.expectedValues && issue.context.expectedValues.length > 0 && (
+                                    <p className="ml-2">Oczekiwane wartości: <code className="bg-gray-100 px-1 rounded">{issue.context.expectedValues.join(', ')}</code></p>
+                                  )}
+                                  {issue.context.relatedElements && issue.context.relatedElements.length > 0 && (
+                                    <p className="ml-2">Powiązane elementy: <code className="bg-gray-100 px-1 rounded">{issue.context.relatedElements.join(', ')}</code></p>
+                                  )}
+                                </div>
+                              )}
+
+                              {issue.fixSuggestions?.length > 0 && (
+                                <div className="space-y-2 pt-2 border-t border-gray-200">
+                                  <p className="font-medium text-gray-600">Sugestie naprawy:</p>
+                                  {issue.fixSuggestions.map((fix, i) => (
+                                    <div key={i} className="ml-2 p-2 bg-blue-50 rounded border border-blue-100">
+                                      <p className="text-gray-800">💡 {fix.description}</p>
+                                      <div className="mt-1 space-y-0.5 text-gray-600">
+                                        <p>Typ: <code className="bg-white px-1 rounded">{fix.type}</code> | Pewność: {Math.round(fix.confidence * 100)}%</p>
+                                        {fix.targetXPath && <p className="font-mono break-all">Cel: {fix.targetXPath}</p>}
+                                        {fix.content && <p>Zawartość: <code className="bg-white px-1 rounded">{fix.content}</code></p>}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </details>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            ) : null}
+
+            <div className="mt-6 flex gap-4">
+              <button
+                onClick={() => setStep('preview')}
+                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 flex items-center gap-2"
+              >
+                <ChevronLeft className="w-4 h-4" /> Wstecz
+              </button>
+              <button
+                onClick={handleDownload}
+                disabled={validating}
+                className={`flex-1 px-4 py-2 rounded-md flex items-center justify-center gap-2 ${
+                  validationResult && !validationResult.valid
+                    ? 'bg-yellow-500 text-white hover:bg-yellow-600'
+                    : 'bg-blue-600 text-white hover:bg-blue-700'
+                } disabled:bg-gray-400 disabled:cursor-not-allowed`}
+              >
                 <Download className="w-4 h-4" />
-                Generuj XML + PDF
+                {validationResult && !validationResult.valid ? 'Pobierz mimo błędów' : 'Pobierz XML + PDF'}
               </button>
             </div>
           </div>

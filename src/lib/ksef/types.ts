@@ -51,6 +51,8 @@ export interface DaneIdentyfikacyjneNabywcy {
   nazwa?: string;
   kodUE?: string;
   nrVatUE?: string;
+  kodKraju?: string;
+  nrID?: string;
   brakId?: boolean;
 }
 

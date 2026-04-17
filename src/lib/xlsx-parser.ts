@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx';
-import { Faktura, Podmiot1, Podmiot2, WierszFaktury, Platnosc, FormaPlatnosci, RodzajFaktury, PodsumowanieVAT, StawkaPodatku } from './ksef/types';
+import { Faktura, Podmiot1, Podmiot2, WierszFaktury, Platnosc, FormaPlatnosci, RodzajFaktury, PodsumowanieVAT, StawkaPodatku, DaneIdentyfikacyjneNabywcy } from './ksef/types';
 
 export interface XlsxRow {
   numer: string | number;
@@ -86,7 +86,7 @@ export class ParsedInvoiceRow {
     this.formaPlatnosci = this.parseFormaPlatnosci(row.forma_plat);
     
     this.nabywcaNazwa = String(row.nazwa || '');
-    this.nabywcaNip = String(row.nip || '');
+    this.nabywcaNip = this.parseNipOrTaxId(String(row.nip || ''));
     this.nabywcaKodPocztowy = String(row.kod_poczt || '');
     this.nabywcaMiejscowosc = String(row.miejscowosc || '');
     this.nabywcaAdres = String(row.adres || '');
@@ -105,6 +105,31 @@ export class ParsedInvoiceRow {
     this.kwotaBrutto = Math.round((this.pozycjaWartosc + this.kwotaVat) * 100) / 100;
     
     this.validate();
+  }
+
+  private parseNipOrTaxId(value: string): string {
+    if (!value) return '';
+    
+    const trimmed = value.trim().toUpperCase();
+    
+    // EU country codes (2 letters)
+    const euCountries = ['AT', 'BE', 'BG', 'CY', 'CZ', 'DE', 'DK', 'EE', 'ES', 'FI', 'FR', 'GR', 'HR', 'HU', 'IE', 'IT', 'LT', 'LU', 'LV', 'MT', 'NL', 'PL', 'PT', 'RO', 'SE', 'SI', 'SK'];
+    
+    // Check for EU VAT format: COUNTRY_CODEXXXXXXXX (e.g., DE123456789)
+    const euMatch = trimmed.match(/^([A-Z]{2})(.+)$/);
+    if (euMatch && euCountries.includes(euMatch[1])) {
+      // Return as-is, will be parsed in rowsToFaktura
+      return trimmed;
+    }
+    
+    // Check for non-EU format: UEXXXXXXXX (e.g., UE123456789)
+    if (trimmed.startsWith('UE')) {
+      // Return as-is, will be parsed in rowsToFaktura
+      return trimmed;
+    }
+    
+    // Regular Polish NIP or other format
+    return trimmed;
   }
 
   private parseDate(dateStr: string | number | undefined): string {
@@ -370,6 +395,40 @@ export function buildVatSummary(rows: ParsedInvoiceRow[]): PodsumowanieVAT {
   return summary;
 }
 
+function parseBuyerTaxId(nip: string, kraj: string): Partial<DaneIdentyfikacyjneNabywcy> {
+  if (!nip) return {};
+  
+  const trimmed = nip.trim().toUpperCase();
+  
+  // EU country codes (2 letters)
+  const euCountries = ['AT', 'BE', 'BG', 'CY', 'CZ', 'DE', 'DK', 'EE', 'ES', 'FI', 'FR', 'GR', 'HR', 'HU', 'IE', 'IT', 'LT', 'LU', 'LV', 'MT', 'NL', 'PL', 'PT', 'RO', 'SE', 'SI', 'SK'];
+  
+  // Check for format: COUNTRY_CODEXXXXXXXX (e.g., DE123456789, UA428569613042)
+  const countryMatch = trimmed.match(/^([A-Z]{2})(.+)$/);
+  if (countryMatch && countryMatch[2].length > 0) {
+    const [, countryCode, taxNumber] = countryMatch;
+    
+    // If it's an EU country, use KodUE + NrVatUE
+    if (euCountries.includes(countryCode)) {
+      return { kodUE: countryCode, nrVatUE: taxNumber };
+    }
+    
+    // Otherwise it's a non-EU country, use KodKraju + NrID
+    return { kodKraju: countryCode, nrID: taxNumber };
+  }
+  
+  // Check for non-EU format: UEXXXXXXXX (e.g., UE123456789)
+  if (trimmed.startsWith('UE') && trimmed.length > 2) {
+    const nrID = trimmed.substring(2);
+    // Use country code from kraj field if available and not PL
+    const kodKraju = (kraj && kraj !== 'PL') ? kraj : undefined;
+    return { kodKraju, nrID };
+  }
+  
+  // Regular Polish NIP or other format
+  return { nip: trimmed };
+}
+
 export function rowsToFaktura(rows: ParsedInvoiceRow[], seller: SellerInfo): Faktura {
   if (rows.length === 0) {
     throw new Error('Brak wierszy do przetworzenia');
@@ -389,9 +448,12 @@ export function rowsToFaktura(rows: ParsedInvoiceRow[], seller: SellerInfo): Fak
     },
   };
 
+  // Parse buyer tax identification
+  const buyerTaxId = parseBuyerTaxId(firstRow.nabywcaNip, firstRow.nabywcaKraj);
+
   const podmiot2: Podmiot2 = {
     daneIdentyfikacyjne: {
-      nip: firstRow.nabywcaNip,
+      ...buyerTaxId,
       nazwa: firstRow.nabywcaNazwa,
     },
     adres: {
@@ -399,8 +461,8 @@ export function rowsToFaktura(rows: ParsedInvoiceRow[], seller: SellerInfo): Fak
       adresL1: `${firstRow.nabywcaKodPocztowy} ${firstRow.nabywcaMiejscowosc}`,
       adresL2: firstRow.nabywcaAdres,
     },
-    jst: 0,
-    gv: 0,
+    jst: 2,
+    gv: 2,
   };
 
   const wiersze: WierszFaktury[] = rows.map((row, index) => ({
@@ -443,9 +505,10 @@ export function rowsToFaktura(rows: ParsedInvoiceRow[], seller: SellerInfo): Fak
     kwotaNaleznosci: totalBrutto,
     platnosc,
     kodWaluty: firstRow.waluta,
-    ...(seller.dodatkowyOpis && {
-      dodatkowyOpis: [['Opis', seller.dodatkowyOpis]],
-    }),
+    // Note: dodatkowyOpis temporarily disabled due to XSD validation issues
+    // ...(seller.dodatkowyOpis && {
+    //   dodatkowyOpis: [['Opis', seller.dodatkowyOpis]],
+    // }),
   };
 
   return faktura;

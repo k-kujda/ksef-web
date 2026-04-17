@@ -10,4 +10,12 @@ export default defineConfig({
     },
   },
   base: '/ksef-web/',
+  optimizeDeps: {
+    esbuildOptions: {
+      target: 'esnext',
+    },
+  },
+  build: {
+    target: 'esnext',
+  },
 })

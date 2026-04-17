@@ -1,5 +1,5 @@
 import { Outlet, Link, useLocation } from 'react-router-dom';
-import { FileText, Download, FileImage, FileSpreadsheet, Users, Settings as SettingsIcon } from 'lucide-react';
+import { FileText, Download, FileImage, FileSpreadsheet, ShieldCheck, Users, Settings as SettingsIcon } from 'lucide-react';
 import GitInfo from '../GitInfo';
 
 export default function Layout() {
@@ -10,6 +10,7 @@ export default function Layout() {
     { path: '/download', label: 'Pobierz z KSeF', icon: Download },
     { path: '/convert', label: 'Konwertuj do PDF', icon: FileImage },
     { path: '/xlsx-to-xml', label: 'XLSX do XML', icon: FileSpreadsheet },
+    { path: '/validate', label: 'Walidacja XML', icon: ShieldCheck },
     { path: '/contacts', label: 'Kontakty', icon: Users },
     { path: '/settings', label: 'Ustawienia', icon: SettingsIcon },
   ];

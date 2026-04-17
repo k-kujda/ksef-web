@@ -9,6 +9,7 @@
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0"
   },
   "dependencies": {
+    "@ksefuj/validator": "^0.3.0",
     "jszip": "^3.10.1",
     "lucide-react": "^0.344.0",
     "pdfmake": "^0.2.20",
