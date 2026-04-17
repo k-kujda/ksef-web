@@ -28,7 +28,7 @@ export default function XlsxToXml() {
     swift: '',
     nazwaBanku: '',
     opisRachunku: '',
-    dodatkowyOpis: '',
+    dodatkowyOpis: [],
   });
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -330,13 +330,54 @@ export default function XlsxToXml() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Dodatkowy opis (opcjonalnie)
                 </label>
-                <textarea
-                  value={seller.dodatkowyOpis}
-                  onChange={(e) => setSeller({ ...seller, dodatkowyOpis: e.target.value })}
-                  placeholder="Dodatkowe informacje na fakturze..."
-                  rows={2}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
+                <div className="space-y-2">
+                  {seller.dodatkowyOpis?.map((item, idx) => (
+                    <div key={idx} className="flex gap-2">
+                      <input
+                        type="text"
+                        value={item[0]}
+                        onChange={(e) => {
+                          const newList: Array<[string, string]> = [...(seller.dodatkowyOpis || [])];
+                          newList[idx] = [e.target.value, item[1]] as [string, string];
+                          setSeller({ ...seller, dodatkowyOpis: newList });
+                        }}
+                        placeholder="Klucz"
+                        className="w-1/3 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                      <input
+                        type="text"
+                        value={item[1]}
+                        onChange={(e) => {
+                          const newList: Array<[string, string]> = [...(seller.dodatkowyOpis || [])];
+                          newList[idx] = [item[0], e.target.value] as [string, string];
+                          setSeller({ ...seller, dodatkowyOpis: newList });
+                        }}
+                        placeholder="Wartość"
+                        className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const newList = seller.dodatkowyOpis?.filter((_, i) => i !== idx) || [];
+                          setSeller({ ...seller, dodatkowyOpis: newList });
+                        }}
+                        className="px-3 py-2 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-md"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const newList: Array<[string, string]> = [...(seller.dodatkowyOpis || []), ['', ''] as [string, string]];
+                      setSeller({ ...seller, dodatkowyOpis: newList });
+                    }}
+                    className="w-full px-3 py-2 text-sm text-blue-600 hover:text-blue-800 hover:bg-blue-50 border border-blue-300 rounded-md"
+                  >
+                    + Dodaj pole
+                  </button>
+                </div>
               </div>
             </div>
           </div>

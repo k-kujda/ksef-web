@@ -41,7 +41,7 @@ export interface SellerInfo {
   swift?: string;
   nazwaBanku?: string;
   opisRachunku?: string;
-  dodatkowyOpis?: string;
+  dodatkowyOpis?: Array<[string, string]>;
 }
 
 export interface ValidationError {
@@ -505,10 +505,9 @@ export function rowsToFaktura(rows: ParsedInvoiceRow[], seller: SellerInfo): Fak
     kwotaNaleznosci: totalBrutto,
     platnosc,
     kodWaluty: firstRow.waluta,
-    // Note: dodatkowyOpis temporarily disabled due to XSD validation issues
-    // ...(seller.dodatkowyOpis && {
-    //   dodatkowyOpis: [['Opis', seller.dodatkowyOpis]],
-    // }),
+    ...(seller.dodatkowyOpis && seller.dodatkowyOpis.length > 0 && {
+      dodatkowyOpis: seller.dodatkowyOpis,
+    }),
   };
 
   return faktura;
