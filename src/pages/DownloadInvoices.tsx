@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Download, RefreshCw } from 'lucide-react';
+import JSZip from 'jszip';
 import { KSeFClient, InvoiceMetadata } from '../lib/ksef/client';
 import { MAX_DATE_RANGE_DAYS } from '../lib/ksef/constants';
 import { loadSettings } from '../lib/settings';
@@ -38,6 +39,7 @@ export default function DownloadInvoices() {
   const [authenticated, setAuthenticated] = useState(false);
   const [invoices, setInvoices] = useState<InvoiceMetadata[]>([]);
   const [client, setClient] = useState<KSeFClient | null>(null);
+  const [exportProgress, setExportProgress] = useState({ current: 0, total: 0 });
   const dateRangeError = validateDateRange(dateFrom, dateTo);
   const maximumDateTo = dateFrom ? addDays(dateFrom, MAX_DATE_RANGE_DAYS) : undefined;
 
@@ -149,25 +151,69 @@ export default function DownloadInvoices() {
 
       alert(`Eksport zainicjowany. Numer referencyjny: ${referenceNumber}\nOczekiwanie na przygotowanie...`);
 
-      const { invoices: exportedInvoices } = await client.downloadExport(referenceNumber, encryptionData);
+      const {
+        invoices: exportedInvoices,
+        metadata,
+      } = await client.downloadExport(referenceNumber, encryptionData);
+      const invoiceEntries = Object.entries(exportedInvoices);
+      const zip = new JSZip();
+      const { generateInvoice } = await import('../lib/pdf-generator');
+      let generatedPdfCount = 0;
 
-      for (const [filename, content] of Object.entries(exportedInvoices)) {
-        const blob = new Blob([content], { type: 'application/xml' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = filename;
-        a.click();
-        URL.revokeObjectURL(url);
-        await new Promise(resolve => setTimeout(resolve, 100));
+      setExportProgress({ current: 0, total: invoiceEntries.length });
+
+      for (let index = 0; index < invoiceEntries.length; index++) {
+        const [filename, content] = invoiceEntries[index];
+        const baseName = filename.replace(/\.xml$/i, '');
+        const invoiceMetadata = metadata.find(
+          (item) => item.ksefNumber === baseName || item.ksefNumber === filename
+        );
+        const ksefNumber = invoiceMetadata?.ksefNumber || baseName;
+
+        zip.file(`XML/${filename}`, content);
+
+        try {
+          const xmlFile = new File([content], filename, { type: 'application/xml' });
+          const pdfBlob = await generateInvoice(
+            xmlFile,
+            { nrKSeF: ksefNumber },
+            'blob'
+          );
+          zip.file(`PDF/${baseName}.pdf`, pdfBlob);
+          generatedPdfCount++;
+        } catch (error) {
+          console.error(`Błąd wizualizacji ${filename}:`, error);
+          zip.file(
+            `PDF/${baseName}_ERROR.txt`,
+            `Nie udało się wygenerować wizualizacji PDF: ${(error as Error).message}`
+          );
+        }
+
+        setExportProgress({ current: index + 1, total: invoiceEntries.length });
       }
 
-      alert(`Pobrano ${Object.keys(exportedInvoices).length} faktur`);
+      const zipBlob = await zip.generateAsync({
+        type: 'blob',
+        compression: 'DEFLATE',
+        compressionOptions: { level: 6 },
+      });
+      const url = URL.createObjectURL(zipBlob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `faktury_ksef_${dateFrom}_${dateTo}.zip`;
+      a.click();
+      URL.revokeObjectURL(url);
+
+      alert(
+        `Pobrano jeden plik ZIP: ${invoiceEntries.length} XML i ` +
+        `${generatedPdfCount} wizualizacji PDF.`
+      );
     } catch (error) {
       console.error('Błąd eksportu:', error);
       alert('Błąd eksportu: ' + (error as Error).message);
     } finally {
       setLoading(false);
+      setExportProgress({ current: 0, total: 0 });
     }
   };
 
@@ -249,9 +295,28 @@ export default function DownloadInvoices() {
             className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
           >
             <Download className="w-4 h-4" />
-            Eksportuj wszystkie
+            {exportProgress.total > 0
+              ? `Tworzenie ZIP ${exportProgress.current}/${exportProgress.total}`
+              : 'Eksportuj ZIP (XML + PDF)'}
           </button>
         </div>
+
+        {exportProgress.total > 0 && (
+          <div className="space-y-2">
+            <div className="flex justify-between text-sm text-gray-600">
+              <span>Generowanie wizualizacji PDF...</span>
+              <span>{exportProgress.current} / {exportProgress.total}</span>
+            </div>
+            <div className="w-full bg-gray-200 rounded-full h-2">
+              <div
+                className="bg-purple-600 h-2 rounded-full transition-all duration-300"
+                style={{
+                  width: `${(exportProgress.current / exportProgress.total) * 100}%`,
+                }}
+              />
+            </div>
+          </div>
+        )}
 
         {invoices.length > 0 && (
           <div className="border border-gray-200 rounded-md overflow-hidden">
