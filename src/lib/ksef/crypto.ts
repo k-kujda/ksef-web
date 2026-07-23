@@ -5,8 +5,24 @@ export interface EncryptionData {
   initializationVector: string;
 }
 
-export async function fetchPublicKey(baseUrl: string, usage: string): Promise<CryptoKey> {
-  const response = await fetch(`${baseUrl}/security/public-key-certificates`);
+export async function fetchPublicKey(
+  baseUrl: string,
+  usage: string,
+  corsProxyUrl?: string
+): Promise<CryptoKey> {
+  const response = await fetch(
+    corsProxyUrl
+      ? `${corsProxyUrl}/security/public-key-certificates`
+      : `${baseUrl}/security/public-key-certificates`,
+    corsProxyUrl
+      ? { headers: { 'X-KSeF-Base-Url': baseUrl } }
+      : undefined
+  );
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch KSeF public certificates (HTTP ${response.status})`);
+  }
+
   const certs = await response.json();
   
   for (const cert of certs) {
@@ -91,11 +107,14 @@ function parseAsn1Certificate(der: Uint8Array): { publicKey: ArrayBuffer } {
   };
 }
 
-export async function generateEncryptionData(baseUrl: string): Promise<EncryptionData> {
+export async function generateEncryptionData(
+  baseUrl: string,
+  corsProxyUrl?: string
+): Promise<EncryptionData> {
   const cipherKey = crypto.getRandomValues(new Uint8Array(32));
   const cipherIv = crypto.getRandomValues(new Uint8Array(16));
   
-  const publicKey = await fetchPublicKey(baseUrl, 'SymmetricKeyEncryption');
+  const publicKey = await fetchPublicKey(baseUrl, 'SymmetricKeyEncryption', corsProxyUrl);
   
   const encryptedKey = await crypto.subtle.encrypt(
     {
@@ -116,12 +135,13 @@ export async function generateEncryptionData(baseUrl: string): Promise<Encryptio
 export async function encryptKsefToken(
   baseUrl: string,
   ksefToken: string,
-  timestampMs: number
+  timestampMs: number,
+  corsProxyUrl?: string
 ): Promise<string> {
   const tokenPlain = `${ksefToken}|${timestampMs}`;
   const tokenBytes = new TextEncoder().encode(tokenPlain);
   
-  const publicKey = await fetchPublicKey(baseUrl, 'KsefTokenEncryption');
+  const publicKey = await fetchPublicKey(baseUrl, 'KsefTokenEncryption', corsProxyUrl);
   
   const encrypted = await crypto.subtle.encrypt(
     {

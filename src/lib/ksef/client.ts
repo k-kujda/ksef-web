@@ -95,7 +95,8 @@ export class KSeFClient {
     const encryptedToken = await encryptKsefToken(
       this.baseUrl,
       this.ksefToken,
-      challenge.timestamp
+      challenge.timestampMs,
+      this.corsProxyUrl
     );
 
     const authResp = await this.request('/auth/ksef-token', {
@@ -216,7 +217,7 @@ export class KSeFClient {
     
     this.validateDateRange(dateFrom, dateTo);
     
-    const encryptionData = await generateEncryptionData(this.baseUrl);
+    const encryptionData = await generateEncryptionData(this.baseUrl, this.corsProxyUrl);
     
     const resp = await this.request('/invoices/exports', {
       method: 'POST',
