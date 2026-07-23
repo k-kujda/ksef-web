@@ -92,7 +92,7 @@ export class KSeFClient {
     
     const challenge = await challengeResp.json();
 
-    const encryptedToken = await encryptKsefToken(
+    const tokenEncryption = await encryptKsefToken(
       this.baseUrl,
       this.ksefToken,
       challenge.timestampMs,
@@ -108,7 +108,8 @@ export class KSeFClient {
           type: 'Nip',
           value: this.nip,
         },
-        encryptedToken,
+        encryptedToken: tokenEncryption.encryptedToken,
+        publicKeyId: tokenEncryption.publicKeyId,
       }),
     });
     const authData = await authResp.json();
@@ -238,6 +239,7 @@ export class KSeFClient {
         encryption: {
           encryptedSymmetricKey: encryptionData.encryptedSymmetricKey,
           initializationVector: encryptionData.initializationVector,
+          publicKeyId: encryptionData.publicKeyId,
         },
       }),
     });

@@ -3,13 +3,19 @@ export interface EncryptionData {
   cipherIv: Uint8Array;
   encryptedSymmetricKey: string;
   initializationVector: string;
+  publicKeyId?: string;
+}
+
+interface PublicKeyData {
+  key: CryptoKey;
+  publicKeyId?: string;
 }
 
 export async function fetchPublicKey(
   baseUrl: string,
   usage: string,
   corsProxyUrl?: string
-): Promise<CryptoKey> {
+): Promise<PublicKeyData> {
   const response = await fetch(
     corsProxyUrl
       ? `${corsProxyUrl}/security/public-key-certificates`
@@ -28,8 +34,8 @@ export async function fetchPublicKey(
   for (const cert of certs) {
     if (cert.usage && cert.usage.includes(usage)) {
       const certDer = base64ToArrayBuffer(cert.certificate);
-      const certObj = await importCertificate(certDer);
-      return certObj;
+      const key = await importCertificate(certDer);
+      return { key, publicKeyId: cert.publicKeyId };
     }
   }
   
@@ -37,8 +43,7 @@ export async function fetchPublicKey(
 }
 
 async function importCertificate(certDer: ArrayBuffer): Promise<CryptoKey> {
-  const certPem = arrayBufferToPem(certDer, 'CERTIFICATE');
-  const publicKeyDer = await extractPublicKeyFromCert(certPem);
+  const publicKeyDer = extractPublicKeyFromCert(certDer);
   
   return await crypto.subtle.importKey(
     'spki',
@@ -52,59 +57,74 @@ async function importCertificate(certDer: ArrayBuffer): Promise<CryptoKey> {
   );
 }
 
-function arrayBufferToPem(buffer: ArrayBuffer, label: string): string {
-  const base64 = arrayBufferToBase64(buffer);
-  const lines = base64.match(/.{1,64}/g) || [];
-  return `-----BEGIN ${label}-----\n${lines.join('\n')}\n-----END ${label}-----`;
+function extractPublicKeyFromCert(certDer: ArrayBuffer): ArrayBuffer {
+  return parseAsn1Certificate(new Uint8Array(certDer));
 }
 
-async function extractPublicKeyFromCert(certPem: string): Promise<ArrayBuffer> {
-  const certLines = certPem.split('\n').filter(line => 
-    !line.includes('BEGIN') && !line.includes('END')
-  ).join('');
-  const certDer = base64ToArrayBuffer(certLines);
-  
-  const asn1 = parseAsn1Certificate(new Uint8Array(certDer));
-  return asn1.publicKey as ArrayBuffer;
+interface DerNode {
+  tag: number;
+  start: number;
+  valueStart: number;
+  end: number;
 }
 
-function parseAsn1Certificate(der: Uint8Array): { publicKey: ArrayBuffer } {
-  let offset = 0;
-  
-  const readLength = (): number => {
-    const firstByte = der[offset++];
-    if (firstByte < 128) return firstByte;
-    const numBytes = firstByte & 0x7f;
-    let length = 0;
-    for (let i = 0; i < numBytes; i++) {
-      length = (length << 8) | der[offset++];
+function readDerNode(der: Uint8Array, start: number): DerNode {
+  if (start < 0 || start + 2 > der.length) {
+    throw new Error('Invalid X.509 certificate');
+  }
+
+  const tag = der[start];
+  let cursor = start + 1;
+  const firstLengthByte = der[cursor++];
+  let length: number;
+
+  if ((firstLengthByte & 0x80) === 0) {
+    length = firstLengthByte;
+  } else {
+    const lengthBytes = firstLengthByte & 0x7f;
+    if (lengthBytes === 0 || lengthBytes > 4 || cursor + lengthBytes > der.length) {
+      throw new Error('Invalid X.509 certificate length');
     }
-    return length;
-  };
-  
-  const skipTag = () => {
-    offset++;
-    const length = readLength();
-    return length;
-  };
-  
-  skipTag();
-  skipTag();
-  skipTag();
-  skipTag();
-  skipTag();
-  skipTag();
-  
-  offset++;
-  const pubKeyLen = readLength();
-  offset++;
-  
-  const pubKeyStart = offset;
-  const pubKeyEnd = offset + pubKeyLen - 1;
-  
-  return {
-    publicKey: der.slice(pubKeyStart, pubKeyEnd).buffer
-  };
+
+    length = 0;
+    for (let i = 0; i < lengthBytes; i++) {
+      length = length * 256 + der[cursor++];
+    }
+  }
+
+  const end = cursor + length;
+  if (end > der.length) throw new Error('Truncated X.509 certificate');
+
+  return { tag, start, valueStart: cursor, end };
+}
+
+function parseAsn1Certificate(der: Uint8Array): ArrayBuffer {
+  const certificate = readDerNode(der, 0);
+  if (certificate.tag !== 0x30) throw new Error('Invalid X.509 certificate sequence');
+
+  const tbsCertificate = readDerNode(der, certificate.valueStart);
+  if (tbsCertificate.tag !== 0x30) throw new Error('Invalid X.509 TBSCertificate');
+
+  let cursor = tbsCertificate.valueStart;
+  let node = readDerNode(der, cursor);
+
+  // Version is an optional context-specific [0] field.
+  if (node.tag === 0xa0) {
+    cursor = node.end;
+  }
+
+  // Skip serialNumber, signature, issuer, validity and subject.
+  for (let i = 0; i < 5; i++) {
+    node = readDerNode(der, cursor);
+    cursor = node.end;
+  }
+
+  const subjectPublicKeyInfo = readDerNode(der, cursor);
+  if (subjectPublicKeyInfo.tag !== 0x30) {
+    throw new Error('X.509 certificate has no SubjectPublicKeyInfo');
+  }
+
+  return der.slice(subjectPublicKeyInfo.start, subjectPublicKeyInfo.end).buffer;
 }
 
 export async function generateEncryptionData(
@@ -120,7 +140,7 @@ export async function generateEncryptionData(
     {
       name: 'RSA-OAEP',
     },
-    publicKey,
+    publicKey.key,
     cipherKey
   );
   
@@ -129,6 +149,7 @@ export async function generateEncryptionData(
     cipherIv,
     encryptedSymmetricKey: arrayBufferToBase64(encryptedKey),
     initializationVector: arrayBufferToBase64(cipherIv.buffer as ArrayBuffer),
+    publicKeyId: publicKey.publicKeyId,
   };
 }
 
@@ -137,7 +158,7 @@ export async function encryptKsefToken(
   ksefToken: string,
   timestampMs: number,
   corsProxyUrl?: string
-): Promise<string> {
+): Promise<{ encryptedToken: string; publicKeyId?: string }> {
   const tokenPlain = `${ksefToken}|${timestampMs}`;
   const tokenBytes = new TextEncoder().encode(tokenPlain);
   
@@ -147,11 +168,14 @@ export async function encryptKsefToken(
     {
       name: 'RSA-OAEP',
     },
-    publicKey,
+    publicKey.key,
     tokenBytes
   );
   
-  return arrayBufferToBase64(encrypted);
+  return {
+    encryptedToken: arrayBufferToBase64(encrypted),
+    publicKeyId: publicKey.publicKeyId,
+  };
 }
 
 export async function encryptInvoice(
