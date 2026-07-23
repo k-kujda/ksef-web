@@ -295,8 +295,20 @@ export class KSeFClient {
     const decryptedParts: Uint8Array[] = [];
     for (const part of status.packageParts) {
       if (!part.url) continue;
-      
-      const resp = await fetch(part.url);
+
+      const resp = this.corsProxyUrl
+        ? await fetch(`${this.corsProxyUrl}/_package`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url: part.url }),
+          })
+        : await fetch(part.url);
+
+      if (!resp.ok) {
+        const message = await resp.text();
+        throw new Error(`Package download failed (HTTP ${resp.status}): ${message}`);
+      }
+
       const encrypted = new Uint8Array(await resp.arrayBuffer());
       const decrypted = await decryptAes(encrypted, encryptionData.cipherKey, encryptionData.cipherIv);
       decryptedParts.push(decrypted);
