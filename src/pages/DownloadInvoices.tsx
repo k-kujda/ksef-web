@@ -1,7 +1,34 @@
 import { useState } from 'react';
 import { Download, RefreshCw } from 'lucide-react';
 import { KSeFClient, InvoiceMetadata } from '../lib/ksef/client';
+import { MAX_DATE_RANGE_DAYS } from '../lib/ksef/constants';
 import { loadSettings } from '../lib/settings';
+
+const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000;
+
+function addDays(date: string, days: number): string {
+  const result = new Date(`${date}T00:00:00Z`);
+  result.setUTCDate(result.getUTCDate() + days);
+  return result.toISOString().slice(0, 10);
+}
+
+function validateDateRange(dateFrom: string, dateTo: string): string | null {
+  if (!dateFrom || !dateTo) return null;
+
+  const from = new Date(`${dateFrom}T00:00:00Z`);
+  const to = new Date(`${dateTo}T00:00:00Z`);
+  const rangeDays = Math.round((to.getTime() - from.getTime()) / MILLISECONDS_PER_DAY);
+
+  if (rangeDays < 0) {
+    return 'Data do nie może być wcześniejsza niż Data od.';
+  }
+
+  if (rangeDays > MAX_DATE_RANGE_DAYS) {
+    return `Zakres dat nie może przekraczać ${MAX_DATE_RANGE_DAYS} dni.`;
+  }
+
+  return null;
+}
 
 export default function DownloadInvoices() {
   const [dateFrom, setDateFrom] = useState('');
@@ -11,6 +38,8 @@ export default function DownloadInvoices() {
   const [authenticated, setAuthenticated] = useState(false);
   const [invoices, setInvoices] = useState<InvoiceMetadata[]>([]);
   const [client, setClient] = useState<KSeFClient | null>(null);
+  const dateRangeError = validateDateRange(dateFrom, dateTo);
+  const maximumDateTo = dateFrom ? addDays(dateFrom, MAX_DATE_RANGE_DAYS) : undefined;
 
   const handleAuth = async () => {
     setLoading(true);
@@ -50,6 +79,11 @@ export default function DownloadInvoices() {
 
     if (!dateFrom || !dateTo) {
       alert('Podaj zakres dat');
+      return;
+    }
+
+    if (dateRangeError) {
+      alert(dateRangeError);
       return;
     }
 
@@ -96,6 +130,11 @@ export default function DownloadInvoices() {
 
     if (!dateFrom || !dateTo) {
       alert('Podaj zakres dat');
+      return;
+    }
+
+    if (dateRangeError) {
+      alert(dateRangeError);
       return;
     }
 
@@ -159,6 +198,7 @@ export default function DownloadInvoices() {
               type="date"
               value={dateFrom}
               onChange={(e) => setDateFrom(e.target.value)}
+              max={dateTo || undefined}
               className="w-full px-3 py-2 border border-gray-300 rounded-md"
             />
           </div>
@@ -169,8 +209,16 @@ export default function DownloadInvoices() {
               type="date"
               value={dateTo}
               onChange={(e) => setDateTo(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md"
+              min={dateFrom || undefined}
+              max={maximumDateTo}
+              aria-invalid={Boolean(dateRangeError)}
+              className={`w-full px-3 py-2 border rounded-md ${
+                dateRangeError ? 'border-red-500' : 'border-gray-300'
+              }`}
             />
+            <p className={`mt-1 text-sm ${dateRangeError ? 'text-red-600' : 'text-gray-500'}`}>
+              {dateRangeError || `Maksymalny zakres: ${MAX_DATE_RANGE_DAYS} dni.`}
+            </p>
           </div>
 
           <div>
@@ -189,7 +237,7 @@ export default function DownloadInvoices() {
         <div className="flex gap-3">
           <button
             onClick={handleSearch}
-            disabled={loading || !authenticated}
+            disabled={loading || !authenticated || Boolean(dateRangeError)}
             className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
@@ -197,7 +245,7 @@ export default function DownloadInvoices() {
           </button>
           <button
             onClick={handleExport}
-            disabled={loading || !authenticated}
+            disabled={loading || !authenticated || Boolean(dateRangeError)}
             className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
           >
             <Download className="w-4 h-4" />
