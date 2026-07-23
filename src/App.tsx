@@ -7,6 +7,7 @@ import XlsxToXml from './pages/XlsxToXml';
 import Contacts from './pages/Contacts';
 import Settings from './pages/Settings';
 import ValidateXml from './pages/ValidateXml';
+import ProcessEpp from './pages/ProcessEpp';
 
 function App() {
   return (
@@ -18,6 +19,7 @@ function App() {
           <Route path="download" element={<DownloadInvoices />} />
           <Route path="convert" element={<ConvertToPDF />} />
           <Route path="xlsx-to-xml" element={<XlsxToXml />} />
+          <Route path="process-epp" element={<ProcessEpp />} />
           <Route path="validate" element={<ValidateXml />} />
           <Route path="contacts" element={<Contacts />} />
           <Route path="settings" element={<Settings />} />
