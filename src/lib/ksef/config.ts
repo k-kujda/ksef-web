@@ -1,5 +1,5 @@
 export const KSEF_CONFIG = {
-  PROXY_URL: 'https://ksef-proxy.kujda-k.workers.dev',
+  PROXY_URL: 'https://ksef-proxy.k-kujda.workers.dev',
   API_BASE: '/api',
 } as const;
 
