@@ -191,18 +191,15 @@ export async function encryptInvoice(
     ['encrypt']
   );
   
-  const padded = pkcs7Pad(invoiceXml, 16);
   const encrypted = await crypto.subtle.encrypt(
     { name: 'AES-CBC', iv: iv as BufferSource },
     cryptoKey,
-    padded as BufferSource
+    invoiceXml as BufferSource
   );
-  
-  const result = new Uint8Array(iv.length + encrypted.byteLength);
-  result.set(iv, 0);
-  result.set(new Uint8Array(encrypted), iv.length);
-  
-  return result;
+
+  // Web Crypto applies PKCS#7 padding for AES-CBC. The IV is sent separately
+  // while opening the online session, so the API expects only the ciphertext.
+  return new Uint8Array(encrypted);
 }
 
 export async function decryptAes(
@@ -231,16 +228,6 @@ export async function decryptAes(
   );
   
   return pkcs7Unpad(new Uint8Array(decrypted));
-}
-
-function pkcs7Pad(data: Uint8Array, blockSize: number): Uint8Array {
-  const paddingLength = blockSize - (data.length % blockSize);
-  const padded = new Uint8Array(data.length + paddingLength);
-  padded.set(data);
-  for (let i = data.length; i < padded.length; i++) {
-    padded[i] = paddingLength;
-  }
-  return padded;
 }
 
 function pkcs7Unpad(data: Uint8Array): Uint8Array {

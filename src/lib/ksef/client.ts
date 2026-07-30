@@ -1,5 +1,12 @@
 import { KSeFEnvironment, MAX_DATE_RANGE_DAYS } from './constants';
-import { encryptKsefToken, generateEncryptionData, EncryptionData, decryptAes } from './crypto';
+import {
+  encryptKsefToken,
+  generateEncryptionData,
+  EncryptionData,
+  decryptAes,
+  encryptInvoice,
+  sha256Base64,
+} from './crypto';
 import JSZip from 'jszip';
 
 export interface InvoiceMetadata {
@@ -23,6 +30,12 @@ export interface ExportStatus {
   status: string;
   packageParts: Array<{ url: string }>;
   isTruncated: boolean;
+}
+
+export interface InvoiceSubmissionResult {
+  sessionReferenceNumber: string;
+  invoiceReferenceNumber: string;
+  sessionClosed: boolean;
 }
 
 export class KSeFClient {
@@ -155,6 +168,98 @@ export class KSeFClient {
       headers: { 'Authorization': `Bearer ${this.accessToken}` },
     });
     return await resp.text();
+  }
+
+  async submitInvoice(invoiceXml: string): Promise<InvoiceSubmissionResult> {
+    if (!this.accessToken) throw new Error('Not authenticated');
+
+    const encryption = await generateEncryptionData(this.baseUrl, this.corsProxyUrl);
+    const openResponse = await this.request('/sessions/online', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${this.accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        formCode: {
+          systemCode: 'FA (3)',
+          schemaVersion: '1-0E',
+          value: 'FA',
+        },
+        encryption: {
+          encryptedSymmetricKey: encryption.encryptedSymmetricKey,
+          initializationVector: encryption.initializationVector,
+        },
+      }),
+    });
+    const session = await openResponse.json();
+    const sessionReferenceNumber = session.referenceNumber as string;
+
+    let invoiceReferenceNumber: string;
+    try {
+      const invoiceBytes = new TextEncoder().encode(invoiceXml);
+      const encryptedBytes = await encryptInvoice(
+        invoiceBytes,
+        encryption.cipherKey,
+        encryption.cipherIv
+      );
+      const sendResponse = await this.request(
+        `/sessions/online/${encodeURIComponent(sessionReferenceNumber)}/invoices`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${this.accessToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            invoiceHash: await sha256Base64(invoiceBytes),
+            invoiceSize: invoiceBytes.byteLength,
+            encryptedInvoiceHash: await sha256Base64(encryptedBytes),
+            encryptedInvoiceSize: encryptedBytes.byteLength,
+            encryptedInvoiceContent: this.bytesToBase64(encryptedBytes),
+            offlineMode: false,
+          }),
+        }
+      );
+      const submitted = await sendResponse.json();
+      invoiceReferenceNumber = submitted.referenceNumber as string;
+    } catch (error) {
+      // Closing is best-effort here; preserve the original send error so the UI
+      // never reports a session-close problem as a failed invoice upload.
+      try {
+        await this.closeOnlineSession(sessionReferenceNumber);
+      } catch {
+        // The original submission error remains the actionable failure.
+      }
+      throw error;
+    }
+
+    try {
+      await this.closeOnlineSession(sessionReferenceNumber);
+      return {
+        sessionReferenceNumber,
+        invoiceReferenceNumber,
+        sessionClosed: true,
+      };
+    } catch {
+      // The invoice was already accepted. Report that fact and avoid inviting
+      // a duplicate retry merely because closing the session failed.
+      return {
+        sessionReferenceNumber,
+        invoiceReferenceNumber,
+        sessionClosed: false,
+      };
+    }
+  }
+
+  private async closeOnlineSession(sessionReferenceNumber: string): Promise<void> {
+    await this.request(
+      `/sessions/online/${encodeURIComponent(sessionReferenceNumber)}/close`,
+      {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${this.accessToken}` },
+      }
+    );
   }
 
   async listInvoices(
@@ -349,5 +454,13 @@ export class KSeFClient {
     if (days > MAX_DATE_RANGE_DAYS) {
       throw new Error(`Date range must not exceed ${MAX_DATE_RANGE_DAYS} days (got ${days} days)`);
     }
+  }
+
+  private bytesToBase64(bytes: Uint8Array): string {
+    let binary = '';
+    for (let i = 0; i < bytes.length; i++) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+    return btoa(binary);
   }
 }
