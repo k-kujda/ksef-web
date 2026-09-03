@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle,
   CheckCircle2,
@@ -26,6 +26,7 @@ import { KSeFEnvironment } from '../lib/ksef/constants';
 
 interface LineItem {
   nazwa: string;
+  priceMode: 'unit' | 'hourly';
   ilosc: number;
   cenaJednostkowaNetto: number;
   stawka: StawkaPodatku;
@@ -34,8 +35,7 @@ interface LineItem {
 interface PreparedInvoice {
   invoice: Faktura;
   xml: string;
-  totalNet: number;
-  totalVat: number;
+  pdfUrl: string;
 }
 
 interface SubmissionResult {
@@ -58,14 +58,19 @@ const environmentLabel: Record<KSeFEnvironment, string> = {
 export default function GenerateInvoice() {
   const [buyerKey, setBuyerKey] = useState('');
   const [invoiceNumber, setInvoiceNumber] = useState('');
-  const [issueDate, setIssueDate] = useState(new Date().toISOString().split('T')[0]);
   const [saleDate, setSaleDate] = useState(new Date().toISOString().split('T')[0]);
-  const [paymentDays, setPaymentDays] = useState(14);
   const [paymentForm, setPaymentForm] = useState<FormaPlatnosci>(FormaPlatnosci.PRZELEW);
   const [lineItems, setLineItems] = useState<LineItem[]>([
-    { nazwa: '', ilosc: 1, cenaJednostkowaNetto: 0, stawka: StawkaPodatku.S23 },
+    {
+      nazwa: '',
+      priceMode: 'unit',
+      ilosc: 1,
+      cenaJednostkowaNetto: 0,
+      stawka: StawkaPodatku.S23,
+    },
   ]);
   const [prepared, setPrepared] = useState<PreparedInvoice | null>(null);
+  const [isPreparing, setIsPreparing] = useState(false);
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [sendError, setSendError] = useState('');
@@ -73,11 +78,17 @@ export default function GenerateInvoice() {
 
   const buyers = listBuyers();
 
+  useEffect(() => {
+    return () => {
+      if (prepared?.pdfUrl) URL.revokeObjectURL(prepared.pdfUrl);
+    };
+  }, [prepared]);
+
   const totals = useMemo(() => {
     let net = 0;
     let vat = 0;
     lineItems.forEach((item) => {
-      const lineNet = item.ilosc * item.cenaJednostkowaNetto;
+      const lineNet = calculateLineNet(item);
       net += lineNet;
       vat += calculateVAT(lineNet, item.stawka);
     });
@@ -93,7 +104,13 @@ export default function GenerateInvoice() {
   const addLineItem = () => {
     setLineItems((items) => [
       ...items,
-      { nazwa: '', ilosc: 1, cenaJednostkowaNetto: 0, stawka: StawkaPodatku.S23 },
+      {
+        nazwa: '',
+        priceMode: 'unit',
+        ilosc: 1,
+        cenaJednostkowaNetto: 0,
+        stawka: StawkaPodatku.S23,
+      },
     ]);
     markDraftChanged();
   };
@@ -116,13 +133,15 @@ export default function GenerateInvoice() {
     markDraftChanged();
   };
 
-  const prepareInvoice = () => {
+  const prepareInvoice = async () => {
+    setIsPreparing(true);
     try {
       const { podmiot: seller, bank } = loadSeller();
       const buyer = loadBuyer(buyerKey);
 
       if (!buyer) throw new Error('Wybierz nabywcę.');
       if (!invoiceNumber.trim()) throw new Error('Podaj numer faktury.');
+      if (!saleDate) throw new Error('Podaj datę sprzedaży.');
       if (!seller.daneIdentyfikacyjne.nip || !seller.daneIdentyfikacyjne.nazwa) {
         throw new Error('Uzupełnij dane sprzedawcy w Kontaktach.');
       }
@@ -142,41 +161,46 @@ export default function GenerateInvoice() {
       const wiersze: WierszFaktury[] = lineItems.map((item, index) => ({
         nrWiersza: index + 1,
         nazwa: item.nazwa.trim(),
+        miara: item.priceMode === 'hourly' ? 'godz.' : undefined,
         ilosc: item.ilosc,
         cenaJednostkowaNetto: item.cenaJednostkowaNetto,
-        wartoscNetto: item.ilosc * item.cenaJednostkowaNetto,
+        wartoscNetto: calculateLineNet(item),
         stawka: item.stawka,
       }));
       const vatSummary = buildVATSummary(lineItems);
-      const paymentDate = new Date(`${issueDate}T12:00:00`);
-      paymentDate.setDate(paymentDate.getDate() + paymentDays);
+      const invoiceDate = new Date(`${saleDate}T12:00:00`);
 
       const invoice: Faktura = {
-        dataWytworzenia: new Date(),
+        dataWytworzenia: invoiceDate,
         systemInfo: 'KSeF Web App',
         podmiot1: seller,
         podmiot2: buyer,
         kodWaluty: 'PLN',
-        dataWystawienia: issueDate,
+        dataWystawienia: saleDate,
         nrFaktury: invoiceNumber.trim(),
-        dataSprzedazy: saleDate !== issueDate ? saleDate : undefined,
+        dataSprzedazy: saleDate,
         rodzajFaktury: RodzajFaktury.VAT,
         kwotaNaleznosci: vatSummary.totalNet + vatSummary.totalVat,
         podsumowanieVat: vatSummary.summary,
         wiersze,
         platnosc: {
           forma: paymentForm,
-          termin: paymentDate.toISOString().split('T')[0],
+          termin: saleDate,
           rachunek: bank,
         },
       };
 
-      setPrepared({
-        invoice,
-        xml: toXmlString(invoice),
-        totalNet: vatSummary.totalNet,
-        totalVat: vatSummary.totalVat,
-      });
+      const xml = toXmlString(invoice);
+      const xmlFile = new File(
+        [xml],
+        `${invoice.nrFaktury.replace(/\//g, '_')}.xml`,
+        { type: 'application/xml;charset=utf-8' }
+      );
+      const { generateInvoice } = await import('../lib/pdf-generator');
+      const pdfBlob = await generateInvoice(xmlFile, { nrKSeF: '' }, 'blob');
+      const pdfUrl = URL.createObjectURL(pdfBlob);
+
+      setPrepared({ invoice, xml, pdfUrl });
       setSubmission(null);
       setSendError('');
       setTimeout(() => {
@@ -186,7 +210,9 @@ export default function GenerateInvoice() {
         });
       });
     } catch (error) {
-      window.alert((error as Error).message);
+      window.alert(`Nie udało się wygenerować podglądu PDF. ${(error as Error).message}`);
+    } finally {
+      setIsPreparing(false);
     }
   };
 
@@ -199,6 +225,14 @@ export default function GenerateInvoice() {
     anchor.download = `${prepared.invoice.nrFaktury.replace(/\//g, '_')}.xml`;
     anchor.click();
     URL.revokeObjectURL(url);
+  };
+
+  const downloadPdf = () => {
+    if (!prepared) return;
+    const anchor = document.createElement('a');
+    anchor.href = prepared.pdfUrl;
+    anchor.download = `${prepared.invoice.nrFaktury.replace(/\//g, '_')}.pdf`;
+    anchor.click();
   };
 
   const requestSubmission = () => {
@@ -272,17 +306,6 @@ export default function GenerateInvoice() {
               className="field"
             />
           </Field>
-          <Field label="Data wystawienia">
-            <input
-              type="date"
-              value={issueDate}
-              onChange={(event) => {
-                setIssueDate(event.target.value);
-                markDraftChanged();
-              }}
-              className="field"
-            />
-          </Field>
           <Field label="Data sprzedaży">
             <input
               type="date"
@@ -293,18 +316,9 @@ export default function GenerateInvoice() {
               }}
               className="field"
             />
-          </Field>
-          <Field label="Termin płatności (dni)">
-            <input
-              type="number"
-              min="0"
-              value={paymentDays}
-              onChange={(event) => {
-                setPaymentDays(Number(event.target.value));
-                markDraftChanged();
-              }}
-              className="field"
-            />
+            <span className="mt-1 block text-xs text-gray-500">
+              Ta data zostanie użyta jako data wystawienia, sprzedaży, wytworzenia i płatności w KSeF.
+            </span>
           </Field>
           <Field label="Forma płatności">
             <select
@@ -350,7 +364,7 @@ export default function GenerateInvoice() {
                     </button>
                   )}
                 </div>
-                <div className="grid gap-3 md:grid-cols-4">
+                <div className="grid gap-3 md:grid-cols-6">
                   <div className="md:col-span-2">
                     <Field label="Nazwa" small>
                       <input
@@ -361,7 +375,23 @@ export default function GenerateInvoice() {
                       />
                     </Field>
                   </div>
-                  <Field label="Ilość" small>
+                  <Field label="Rozliczenie" small>
+                    <select
+                      value={item.priceMode}
+                      onChange={(event) =>
+                        updateLineItem(
+                          index,
+                          'priceMode',
+                          event.target.value as LineItem['priceMode']
+                        )
+                      }
+                      className="field field-small"
+                    >
+                      <option value="unit">Ilość × cena</option>
+                      <option value="hourly">Godziny × stawka</option>
+                    </select>
+                  </Field>
+                  <Field label={item.priceMode === 'hourly' ? 'Liczba godzin' : 'Ilość'} small>
                     <input
                       type="number"
                       min="0.01"
@@ -371,7 +401,7 @@ export default function GenerateInvoice() {
                       className="field field-small"
                     />
                   </Field>
-                  <Field label="Cena netto" small>
+                  <Field label={item.priceMode === 'hourly' ? 'Stawka netto / godz.' : 'Cena netto'} small>
                     <input
                       type="number"
                       min="0"
@@ -398,8 +428,13 @@ export default function GenerateInvoice() {
                       <option value={StawkaPodatku.OO}>oo</option>
                     </select>
                   </Field>
-                  <div className="flex items-end text-sm text-gray-600 md:col-span-3 md:justify-end">
-                    Wartość netto: {money.format(item.ilosc * item.cenaJednostkowaNetto)}
+                  <div className="flex items-end text-sm text-gray-600 md:col-span-5 md:justify-end">
+                    {item.priceMode === 'hourly' && (
+                      <span className="mr-2">
+                        {item.ilosc} godz. × {money.format(item.cenaJednostkowaNetto)} =
+                      </span>
+                    )}
+                    Wartość netto: {money.format(calculateLineNet(item))}
                   </div>
                 </div>
               </div>
@@ -415,10 +450,11 @@ export default function GenerateInvoice() {
         <button
           type="button"
           onClick={prepareInvoice}
-          className="flex w-full items-center justify-center gap-2 rounded-md bg-blue-600 px-4 py-3 font-medium text-white hover:bg-blue-700"
+          disabled={isPreparing}
+          className="flex w-full items-center justify-center gap-2 rounded-md bg-blue-600 px-4 py-3 font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          <Eye className="h-5 w-5" />
-          Generuj podgląd faktury
+          {isPreparing ? <Loader2 className="h-5 w-5 animate-spin" /> : <Eye className="h-5 w-5" />}
+          {isPreparing ? 'Generowanie PDF…' : 'Generuj podgląd PDF'}
         </button>
       </div>
 
@@ -429,6 +465,7 @@ export default function GenerateInvoice() {
           error={sendError}
           submission={submission}
           onDownload={downloadXml}
+          onDownloadPdf={downloadPdf}
           onSubmit={requestSubmission}
         />
       )}
@@ -451,6 +488,7 @@ function InvoicePreview({
   error,
   submission,
   onDownload,
+  onDownloadPdf,
   onSubmit,
 }: {
   prepared: PreparedInvoice;
@@ -458,10 +496,10 @@ function InvoicePreview({
   error: string;
   submission: SubmissionResult | null;
   onDownload: () => void;
+  onDownloadPdf: () => void;
   onSubmit: () => void;
 }) {
-  const { invoice, totalNet, totalVat } = prepared;
-  const buyer = invoice.podmiot2;
+  const { invoice } = prepared;
 
   return (
     <section
@@ -479,48 +517,15 @@ function InvoicePreview({
       </div>
 
       <div className="p-6">
-        <div className="grid gap-6 border-b border-slate-200 pb-6 md:grid-cols-2">
-          <Party label="Sprzedawca" party={invoice.podmiot1} />
-          <Party label="Nabywca" party={buyer} />
-        </div>
-
-        <div className="grid gap-3 border-b border-slate-200 py-5 text-sm sm:grid-cols-3">
-          <Summary label="Data wystawienia" value={invoice.dataWystawienia} />
-          <Summary label="Data sprzedaży" value={invoice.dataSprzedazy || invoice.dataWystawienia} />
-          <Summary label="Termin płatności" value={invoice.platnosc?.termin || '—'} />
-        </div>
-
-        <div className="overflow-x-auto py-6">
-          <table className="w-full min-w-[680px] text-left text-sm">
-            <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
-              <tr>
-                <th className="px-3 py-3">Lp.</th>
-                <th className="px-3 py-3">Nazwa</th>
-                <th className="px-3 py-3 text-right">Ilość</th>
-                <th className="px-3 py-3 text-right">Cena netto</th>
-                <th className="px-3 py-3 text-right">VAT</th>
-                <th className="px-3 py-3 text-right">Netto</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {invoice.wiersze.map((row) => (
-                <tr key={row.nrWiersza}>
-                  <td className="px-3 py-3 text-slate-500">{row.nrWiersza}</td>
-                  <td className="px-3 py-3 font-medium text-slate-900">{row.nazwa}</td>
-                  <td className="px-3 py-3 text-right">{row.ilosc}</td>
-                  <td className="px-3 py-3 text-right">{money.format(row.cenaJednostkowaNetto || 0)}</td>
-                  <td className="px-3 py-3 text-right">{row.stawka}%</td>
-                  <td className="px-3 py-3 text-right">{money.format(row.wartoscNetto || 0)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        <div className="ml-auto grid max-w-sm gap-2 border-t border-slate-200 pt-4 text-sm">
-          <Amount label="Razem netto" value={totalNet} />
-          <Amount label="VAT" value={totalVat} />
-          <Amount label="Do zapłaty" value={invoice.kwotaNaleznosci} strong />
+        <div className="overflow-hidden rounded-lg border border-slate-300 bg-slate-100">
+          <iframe
+            title={`Podgląd PDF faktury ${invoice.nrFaktury}`}
+            src={prepared.pdfUrl}
+            className="h-[75vh] min-h-[640px] w-full bg-white"
+          />
+          <div className="border-t border-slate-300 bg-white px-4 py-2 text-xs text-slate-500">
+            Podgląd wygenerowany przez generator PDF na podstawie tego samego XML, który zostanie wysłany do KSeF.
+          </div>
         </div>
 
         {error && (
@@ -559,6 +564,14 @@ function InvoicePreview({
         )}
 
         <div className="mt-6 flex flex-col-reverse gap-3 border-t border-slate-200 pt-5 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            onClick={onDownloadPdf}
+            className="flex items-center justify-center gap-2 rounded-md border border-slate-300 px-4 py-2 font-medium text-slate-700 hover:bg-slate-50"
+          >
+            <Download className="h-4 w-4" />
+            Pobierz PDF
+          </button>
           <button
             type="button"
             onClick={onDownload}
@@ -688,50 +701,13 @@ function Field({
   );
 }
 
-function Party({
-  label,
-  party,
-}: {
-  label: string;
-  party: Faktura['podmiot1'] | Faktura['podmiot2'];
-}) {
-  const data = party.daneIdentyfikacyjne;
-  return (
-    <div>
-      <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">{label}</div>
-      <div className="font-semibold text-slate-900">{data.nazwa || '—'}</div>
-      {'nip' in data && data.nip && <div className="mt-1 text-sm text-slate-600">NIP: {data.nip}</div>}
-      {party.adres && (
-        <div className="mt-1 text-sm text-slate-600">
-          {party.adres.adresL1}
-          {party.adres.adresL2 && <><br />{party.adres.adresL2}</>}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function Summary({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <div className="text-xs uppercase tracking-wide text-slate-500">{label}</div>
-      <div className="mt-1 font-medium text-slate-900">{value}</div>
-    </div>
-  );
-}
-
-function Amount({ label, value, strong = false }: { label: string; value: number; strong?: boolean }) {
-  return (
-    <div className={`flex items-center justify-between ${strong ? 'mt-1 border-t border-slate-200 pt-3 text-lg font-bold' : ''}`}>
-      <span>{label}</span>
-      <span>{money.format(value)}</span>
-    </div>
-  );
-}
-
 function calculateVAT(net: number, rate: StawkaPodatku): number {
   const numericRate = Number.parseFloat(rate);
   return Number.isNaN(numericRate) ? 0 : (net * numericRate) / 100;
+}
+
+function calculateLineNet(item: LineItem): number {
+  return item.ilosc * item.cenaJednostkowaNetto;
 }
 
 function buildVATSummary(items: LineItem[]) {
@@ -740,7 +716,7 @@ function buildVATSummary(items: LineItem[]) {
   let totalVat = 0;
 
   items.forEach((item) => {
-    const net = item.ilosc * item.cenaJednostkowaNetto;
+    const net = calculateLineNet(item);
     const vat = calculateVAT(net, item.stawka);
     totalNet += net;
     totalVat += vat;

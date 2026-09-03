@@ -122,7 +122,7 @@ export function generateXml(faktura: Faktura): Document {
   fa.appendChild(createElement(doc, 'P_1', formatDate(faktura.dataWystawienia)));
   fa.appendChild(createElement(doc, 'P_2', faktura.nrFaktury));
 
-  if (faktura.dataSprzedazy && faktura.dataSprzedazy !== faktura.dataWystawienia) {
+  if (faktura.dataSprzedazy) {
     fa.appendChild(createElement(doc, 'P_6', formatDate(faktura.dataSprzedazy)));
   }
 
