@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
   CheckCircle2,
@@ -6,6 +6,7 @@ import {
   Eye,
   Loader2,
   Plus,
+  RefreshCw,
   Send,
   ShieldCheck,
   Trash2,
@@ -23,6 +24,11 @@ import { listBuyers, loadBuyer, loadSeller } from '../lib/contacts';
 import { loadSettings } from '../lib/settings';
 import { KSeFClient } from '../lib/ksef/client';
 import { KSeFEnvironment } from '../lib/ksef/constants';
+import {
+  getMonthRange,
+  getRecentRange,
+  suggestInvoiceNumber,
+} from '../lib/invoice-numbering';
 
 interface LineItem {
   nazwa: string;
@@ -45,6 +51,11 @@ interface SubmissionResult {
   sessionClosed: boolean;
 }
 
+interface NumberingStatus {
+  type: 'success' | 'error';
+  message: string;
+}
+
 const money = new Intl.NumberFormat('pl-PL', {
   style: 'currency',
   currency: 'PLN',
@@ -59,7 +70,9 @@ const environmentLabel: Record<KSeFEnvironment, string> = {
 export default function GenerateInvoice() {
   const [buyerKey, setBuyerKey] = useState('');
   const [invoiceNumber, setInvoiceNumber] = useState('');
-  const [saleDate, setSaleDate] = useState(new Date().toISOString().split('T')[0]);
+  const [saleDateInput, setSaleDateInput] = useState(
+    formatPolishDate(new Date().toISOString().split('T')[0])
+  );
   const [paymentForm, setPaymentForm] = useState<FormaPlatnosci>(FormaPlatnosci.PRZELEW);
   const [lineItems, setLineItems] = useState<LineItem[]>([
     {
@@ -77,6 +90,9 @@ export default function GenerateInvoice() {
   const [isSending, setIsSending] = useState(false);
   const [sendError, setSendError] = useState('');
   const [submission, setSubmission] = useState<SubmissionResult | null>(null);
+  const [isSuggestingNumber, setIsSuggestingNumber] = useState(false);
+  const [numberingStatus, setNumberingStatus] = useState<NumberingStatus | null>(null);
+  const didRequestInitialNumber = useRef(false);
 
   const buyers = listBuyers();
 
@@ -136,15 +152,93 @@ export default function GenerateInvoice() {
     markDraftChanged();
   };
 
+  const handleSuggestInvoiceNumber = async () => {
+    const saleDate = parsePolishDate(saleDateInput);
+    if (!saleDate) {
+      setNumberingStatus({ type: 'error', message: 'Podaj datę w formacie dd/mm/rrrr.' });
+      return;
+    }
+
+    const settings = loadSettings();
+    if (!settings.nip.trim() || !settings.ksefToken.trim()) {
+      setNumberingStatus({
+        type: 'error',
+        message: 'Uzupełnij NIP i token KSeF w Ustawieniach.',
+      });
+      return;
+    }
+
+    setIsSuggestingNumber(true);
+    setNumberingStatus(null);
+
+    try {
+      const client = new KSeFClient(
+        settings.environment,
+        settings.nip.trim(),
+        settings.ksefToken,
+        30000,
+        settings.corsProxyUrl
+      );
+      await client.authenticate();
+
+      const monthRange = getMonthRange(saleDate);
+      const monthlyInvoices = await client.listAllInvoices(
+        monthRange.from,
+        monthRange.to,
+        'Subject1',
+        'Issue'
+      );
+      const recentRange = getRecentRange(saleDate);
+      const recentInvoices = monthlyInvoices.length === 0
+        ? await client.listAllInvoices(
+            recentRange.from,
+            recentRange.to,
+            'Subject1',
+            'Issue'
+          )
+        : [];
+      const suggestion = suggestInvoiceNumber(monthlyInvoices, recentInvoices, saleDate);
+
+      setInvoiceNumber(suggestion);
+      markDraftChanged();
+      setNumberingStatus({
+        type: 'success',
+        message: monthlyInvoices.length > 0
+          ? `Ustalono na podstawie ${monthlyInvoices.length} faktur z tego miesiąca.`
+          : recentInvoices.length > 0
+            ? 'Użyto formatu ostatniej faktury i rozpoczęto nową sekwencję miesiąca.'
+            : 'Brak wcześniejszych faktur — użyto domyślnego formatu FV/RRRR/MM/NNN.',
+      });
+    } catch (error) {
+      setNumberingStatus({
+        type: 'error',
+        message: `Nie udało się ustalić numeru z KSeF. ${(error as Error).message}`,
+      });
+    } finally {
+      setIsSuggestingNumber(false);
+    }
+  };
+
+  useEffect(() => {
+    if (didRequestInitialNumber.current) return;
+    didRequestInitialNumber.current = true;
+
+    const settings = loadSettings();
+    if (settings.nip.trim() && settings.ksefToken.trim()) {
+      void handleSuggestInvoiceNumber();
+    }
+  }, []);
+
   const prepareInvoice = async () => {
     setIsPreparing(true);
     try {
       const { podmiot: seller, bank } = loadSeller();
       const buyer = loadBuyer(buyerKey);
+      const saleDate = parsePolishDate(saleDateInput);
 
       if (!buyer) throw new Error('Wybierz nabywcę.');
       if (!invoiceNumber.trim()) throw new Error('Podaj numer faktury.');
-      if (!saleDate) throw new Error('Podaj datę sprzedaży.');
+      if (!saleDate) throw new Error('Podaj datę sprzedaży w formacie dd/mm/rrrr.');
       if (!seller.daneIdentyfikacyjne.nip || !seller.daneIdentyfikacyjne.nazwa) {
         throw new Error('Uzupełnij dane sprzedawcy w Kontaktach.');
       }
@@ -302,13 +396,34 @@ export default function GenerateInvoice() {
               placeholder="FV/2026/07/001"
               className="field"
             />
+            <button
+              type="button"
+              onClick={handleSuggestInvoiceNumber}
+              disabled={isSuggestingNumber}
+              className="mt-2 flex items-center gap-2 text-sm font-medium text-blue-700 hover:text-blue-800 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <RefreshCw className={`h-4 w-4 ${isSuggestingNumber ? 'animate-spin' : ''}`} />
+              {isSuggestingNumber ? 'Sprawdzanie KSeF…' : 'Ustal kolejny numer z KSeF'}
+            </button>
+            {numberingStatus && (
+              <span
+                className={`mt-1 block text-xs ${
+                  numberingStatus.type === 'error' ? 'text-red-600' : 'text-emerald-700'
+                }`}
+              >
+                {numberingStatus.message}
+              </span>
+            )}
           </Field>
           <Field label="Data sprzedaży">
             <input
-              type="date"
-              value={saleDate}
+              type="text"
+              inputMode="numeric"
+              value={saleDateInput}
+              placeholder="dd/mm/rrrr"
               onChange={(event) => {
-                setSaleDate(event.target.value);
+                setSaleDateInput(event.target.value);
+                setNumberingStatus(null);
                 markDraftChanged();
               }}
               className="field"
@@ -718,6 +833,29 @@ function Field({
 function calculateVAT(net: number, rate: StawkaPodatku): number {
   const numericRate = Number.parseFloat(rate);
   return Number.isNaN(numericRate) ? 0 : (net * numericRate) / 100;
+}
+
+function formatPolishDate(isoDate: string): string {
+  const [year, month, day] = isoDate.split('-');
+  return `${day}/${month}/${year}`;
+}
+
+function parsePolishDate(value: string): string | null {
+  const match = value.trim().match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (!match) return null;
+
+  const [, day, month, year] = match;
+  const date = new Date(`${year}-${month}-${day}T00:00:00Z`);
+  if (
+    Number.isNaN(date.getTime()) ||
+    date.getUTCFullYear() !== Number(year) ||
+    date.getUTCMonth() + 1 !== Number(month) ||
+    date.getUTCDate() !== Number(day)
+  ) {
+    return null;
+  }
+
+  return `${year}-${month}-${day}`;
 }
 
 function calculateLineNet(item: LineItem): number {

@@ -86,11 +86,11 @@ export function formatDateTime(data?: string, withoutSeconds?: boolean, withoutT
   const seconds: string = dateTime.getSeconds().toString().padStart(2, '0');
 
   if (withoutTime) {
-    return `${day}.${month}.${year}`;
+    return `${day}/${month}/${year}`;
   } else if (withoutSeconds) {
-    return `${day}.${month}.${year} ${hours}:${minutes}`;
+    return `${day}/${month}/${year} ${hours}:${minutes}`;
   }
-  return `${day}.${month}.${year} ${hours}:${minutes}:${seconds}`;
+  return `${day}/${month}/${year} ${hours}:${minutes}:${seconds}`;
 }
 
 export function getDateTimeWithoutSeconds(isoDate?: FP2): string {

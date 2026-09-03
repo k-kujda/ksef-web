@@ -274,7 +274,12 @@ export class KSeFClient {
     
     this.validateDateRange(dateFrom, dateTo);
     
-    const resp = await this.request('/invoices/query/metadata', {
+    const query = new URLSearchParams({
+      pageOffset: String(pageOffset),
+      pageSize: String(pageSize),
+      sortOrder: 'Asc',
+    });
+    const resp = await this.request(`/invoices/query/metadata?${query}`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${this.accessToken}`,
@@ -287,9 +292,6 @@ export class KSeFClient {
           from: dateFrom,
           to: dateTo,
         },
-        pageOffset,
-        pageSize,
-        sortOrder: 'ASC',
       }),
     });
     
@@ -311,6 +313,34 @@ export class KSeFClient {
     }));
     
     return { items, total: data.totalCount || 0 };
+  }
+
+  async listAllInvoices(
+    dateFrom: string,
+    dateTo: string,
+    subjectType: string = 'Subject1',
+    dateType: string = 'Issue',
+    pageSize: number = 250
+  ): Promise<InvoiceMetadata[]> {
+    const invoices: InvoiceMetadata[] = [];
+    let pageOffset = 0;
+
+    while (true) {
+      const page = await this.listInvoices(
+        dateFrom,
+        dateTo,
+        subjectType,
+        dateType,
+        pageSize,
+        pageOffset
+      );
+      invoices.push(...page.items);
+
+      if (page.items.length === 0 || invoices.length >= page.total) break;
+      pageOffset += 1;
+    }
+
+    return invoices;
   }
 
   async exportInvoices(
