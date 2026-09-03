@@ -29,6 +29,7 @@ interface LineItem {
   priceMode: 'unit' | 'hourly';
   ilosc: number;
   cenaJednostkowaNetto: number;
+  dodatkowaKwotaNetto: number;
   stawka: StawkaPodatku;
 }
 
@@ -66,6 +67,7 @@ export default function GenerateInvoice() {
       priceMode: 'unit',
       ilosc: 1,
       cenaJednostkowaNetto: 0,
+      dodatkowaKwotaNetto: 0,
       stawka: StawkaPodatku.S23,
     },
   ]);
@@ -109,6 +111,7 @@ export default function GenerateInvoice() {
         priceMode: 'unit',
         ilosc: 1,
         cenaJednostkowaNetto: 0,
+        dodatkowaKwotaNetto: 0,
         stawka: StawkaPodatku.S23,
       },
     ]);
@@ -152,21 +155,15 @@ export default function GenerateInvoice() {
             !Number.isFinite(item.ilosc) ||
             item.ilosc <= 0 ||
             !Number.isFinite(item.cenaJednostkowaNetto) ||
-            item.cenaJednostkowaNetto < 0
+            item.cenaJednostkowaNetto < 0 ||
+            !Number.isFinite(item.dodatkowaKwotaNetto) ||
+            item.dodatkowaKwotaNetto < 0
         )
       ) {
         throw new Error('Uzupełnij poprawnie wszystkie pozycje faktury.');
       }
 
-      const wiersze: WierszFaktury[] = lineItems.map((item, index) => ({
-        nrWiersza: index + 1,
-        nazwa: item.nazwa.trim(),
-        miara: item.priceMode === 'hourly' ? 'godz.' : undefined,
-        ilosc: item.ilosc,
-        cenaJednostkowaNetto: item.cenaJednostkowaNetto,
-        wartoscNetto: calculateLineNet(item),
-        stawka: item.stawka,
-      }));
+      const wiersze = buildInvoiceRows(lineItems);
       const vatSummary = buildVATSummary(lineItems);
       const invoiceDate = new Date(`${saleDate}T12:00:00`);
 
@@ -364,7 +361,7 @@ export default function GenerateInvoice() {
                     </button>
                   )}
                 </div>
-                <div className="grid gap-3 md:grid-cols-6">
+                <div className="grid gap-3 md:grid-cols-7">
                   <div className="md:col-span-2">
                     <Field label="Nazwa" small>
                       <input
@@ -413,6 +410,18 @@ export default function GenerateInvoice() {
                       className="field field-small"
                     />
                   </Field>
+                  <Field label="Dodatkowa kwota netto" small>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={item.dodatkowaKwotaNetto}
+                      onChange={(event) =>
+                        updateLineItem(index, 'dodatkowaKwotaNetto', Number(event.target.value))
+                      }
+                      className="field field-small"
+                    />
+                  </Field>
                   <Field label="Stawka VAT" small>
                     <select
                       value={item.stawka}
@@ -428,10 +437,15 @@ export default function GenerateInvoice() {
                       <option value={StawkaPodatku.OO}>oo</option>
                     </select>
                   </Field>
-                  <div className="flex items-end text-sm text-gray-600 md:col-span-5 md:justify-end">
-                    {item.priceMode === 'hourly' && (
+                  <div className="flex flex-wrap items-end gap-x-2 text-sm text-gray-600 md:col-span-6 md:justify-end">
+                    {(item.priceMode === 'hourly' || item.dodatkowaKwotaNetto > 0) && (
                       <span className="mr-2">
-                        {item.ilosc} godz. × {money.format(item.cenaJednostkowaNetto)} =
+                        {item.ilosc} {item.priceMode === 'hourly' ? 'godz.' : 'szt.'} ×{' '}
+                        {money.format(item.cenaJednostkowaNetto)}
+                        {item.dodatkowaKwotaNetto > 0 && (
+                          <> + {money.format(item.dodatkowaKwotaNetto)}</>
+                        )}{' '}
+                        =
                       </span>
                     )}
                     Wartość netto: {money.format(calculateLineNet(item))}
@@ -707,7 +721,37 @@ function calculateVAT(net: number, rate: StawkaPodatku): number {
 }
 
 function calculateLineNet(item: LineItem): number {
-  return item.ilosc * item.cenaJednostkowaNetto;
+  return item.ilosc * item.cenaJednostkowaNetto + item.dodatkowaKwotaNetto;
+}
+
+function buildInvoiceRows(items: LineItem[]): WierszFaktury[] {
+  const rows: WierszFaktury[] = [];
+
+  items.forEach((item) => {
+    rows.push({
+      nrWiersza: rows.length + 1,
+      nazwa: item.nazwa.trim(),
+      miara: item.priceMode === 'hourly' ? 'godz.' : undefined,
+      ilosc: item.ilosc,
+      cenaJednostkowaNetto: item.cenaJednostkowaNetto,
+      wartoscNetto: item.ilosc * item.cenaJednostkowaNetto,
+      stawka: item.stawka,
+    });
+
+    if (item.dodatkowaKwotaNetto > 0) {
+      rows.push({
+        nrWiersza: rows.length + 1,
+        nazwa: `${item.nazwa.trim()} — kwota stała`,
+        miara: 'szt.',
+        ilosc: 1,
+        cenaJednostkowaNetto: item.dodatkowaKwotaNetto,
+        wartoscNetto: item.dodatkowaKwotaNetto,
+        stawka: item.stawka,
+      });
+    }
+  });
+
+  return rows;
 }
 
 function buildVATSummary(items: LineItem[]) {
