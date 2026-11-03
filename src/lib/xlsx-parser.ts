@@ -102,7 +102,7 @@ export class ParsedInvoiceRow {
     
     this.stawka = this.parseStawka(row.stawka_vat);
     this.waluta = String(row.waluta || 'PLN');
-    this.kurs = row.kurs ? this.parseDecimalNumber(row.kurs) : undefined;
+    this.kurs = row.kurs ? this.parseRawDecimal(row.kurs) : undefined;
     
     this.kwotaVat = Math.round(this.calculateVat() * 100) / 100;
     this.kwotaBrutto = Math.round((this.pozycjaWartosc + this.kwotaVat) * 100) / 100;
@@ -176,6 +176,13 @@ export class ParsedInvoiceRow {
     const cleaned = String(value).replace(',', '.').trim();
     const num = parseFloat(cleaned);
     return isNaN(num) ? 0 : Math.round(num * 100) / 100;
+  }
+
+  // Exchange rates must keep full precision (KSeF allows up to 6 decimals)
+  private parseRawDecimal(value: string | number): number {
+    if (typeof value === 'number') return value;
+    const num = parseFloat(String(value).replace(',', '.').trim());
+    return isNaN(num) ? 0 : num;
   }
 
   private parseFormaPlatnosci(forma?: string): FormaPlatnosci {
