@@ -10,6 +10,11 @@ function formatDecimal8(value: number): string {
   return str.replace(/\.?0+$/, '');
 }
 
+// KursWaluty (TIlosci): max 6 decimals, keep at least 4
+function formatRate(value: number): string {
+  return value.toFixed(6).replace(/(\.\d{4}\d*?)0+$/, '$1');
+}
+
 function formatDate(date: string): string {
   return date;
 }
@@ -233,7 +238,7 @@ export function generateXml(faktura: Faktura): Document {
       fw.appendChild(createElement(doc, 'GTU', w.gtu));
     }
     if (w.kursWaluty !== undefined) {
-      fw.appendChild(createElement(doc, 'KursWaluty', formatDecimal(w.kursWaluty)));
+      fw.appendChild(createElement(doc, 'KursWaluty', formatRate(w.kursWaluty)));
     }
     fa.appendChild(fw);
   });
